@@ -1,0 +1,17 @@
+data:
+  ticker: "^GSPC"
+  start: "2000-01-01"
+  end: "2026-08-31"
+
+sample_split:
+  estimation_window: 1000
+  development: ["2004-01-01", "2019-12-31"]
+  locked_test: ["2020-01-01", "2026-08-31"]
+
+risk:
+  confidence_levels_var: [0.99, 0.975]
+  confidence_levels_es: [0.975]
+  horizon_days: 1
+
+returns:
+  scale: 100
