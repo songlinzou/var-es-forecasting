@@ -1,10 +1,17 @@
+# Fixed before any modelling. If anything here changes after results
+# are seen, record the change and the reason in the README.
+#
+# Convention: all risk levels are confidence levels (e.g. 0.99).
+# The tail probability is alpha = 1 - confidence level.
+
 data:
-  ticker: "^GSPC"
+  ticker: "SPY"                # SPDR S&P 500 ETF, from Tiingo
   start: "2000-01-01"
   end: "2026-08-31"
+  raw_snapshot: "spy_2000-01-01_2026-08-31_dl20260929.parquet"           # set to the snapshot file name after running scripts/download_data.py
 
 sample_split:
-  estimation_window: 1000
+  estimation_window: 1000      # trading days; rolling vs expanding decided in Step 4
   development: ["2004-01-01", "2019-12-31"]
   locked_test: ["2020-01-01", "2026-08-31"]
 

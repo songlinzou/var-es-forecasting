@@ -54,6 +54,15 @@ def validate_config(cfg: Any) -> None:
     errors: list[str] = []
     data, split, risk, returns = (cfg[s] for s in REQUIRED_SECTIONS)
 
+    # --- Data identifiers ----------------------------------------------------
+    if not isinstance(data.get("ticker"), str) or not data.get("ticker"):
+        errors.append(f"data.ticker must be a non-empty string, got {data.get('ticker')!r}.")
+
+    snapshot = data.get("raw_snapshot")
+    is_parquet_name = isinstance(snapshot, str) and snapshot.endswith(".parquet")
+    if snapshot is not None and not is_parquet_name:
+        errors.append(f"data.raw_snapshot must be null or a .parquet file name, got {snapshot!r}.")
+
     # --- Dates and periods ---------------------------------------------------
     start = _parse_date(data.get("start"), "data.start", errors)
     end = _parse_date(data.get("end"), "data.end", errors)

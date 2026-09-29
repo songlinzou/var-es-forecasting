@@ -7,23 +7,12 @@ name = "var-es"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "pandas",
-    "scipy",
-    "matplotlib",
-    "statsmodels",
-    "arch",
-    "yfinance",
-    "pyyaml",
-    "pyarrow",
+    "numpy", "pandas", "scipy", "matplotlib",
+    "statsmodels", "arch", "pyyaml", "pyarrow",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "jupyterlab",
-    "ipykernel"
-]
+dev = ["pytest", "jupyterlab", "ipykernel"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

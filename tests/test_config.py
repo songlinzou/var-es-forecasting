@@ -29,7 +29,7 @@ def _write_yaml(tmp_path: Path, cfg: dict) -> Path:
 
 def test_base_config_is_valid():
     cfg = load_config(BASE_CONFIG)
-    assert cfg["data"]["ticker"] == "^GSPC"
+    assert cfg["data"]["ticker"] == "SPY"
 
 
 # --- Loading from files -------------------------------------------------------
@@ -72,6 +72,8 @@ def test_unquoted_yaml_dates_accepted(tmp_path, base_cfg):
 @pytest.mark.parametrize(
     "section, key, bad_value, expected_message",
     [
+        ("data", "ticker", "", "data.ticker must be a non-empty string"),
+        ("data", "raw_snapshot", "prices.csv", "must be null or a .parquet file name"),
         ("data", "end", "1999-12-31", "must be before data.end"),
         ("data", "start", "not-a-date", "not a valid date"),
         ("sample_split", "estimation_window", 0, "must be a positive integer"),
