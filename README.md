@@ -76,3 +76,18 @@ Full report: [reports/stylized_facts.md](reports/stylized_facts.md)
 - **Variance:** EWMA (RiskMetrics) and GARCH(1,1) as benchmarks; GJR-GARCH(1,1) for asymmetry
 - **Innovations:** normal and Student-t
 - **Checks:** Ljung–Box and ARCH-LM on standardized residuals and their squares, plus residual kurtosis
+
+## GARCH estimation (2000–2019, in-sample)
+Full report: [reports/garch_in_sample.md](reports/garch_in_sample.md).
+GARCH log-likelihood implemented from scratch (`src/var_es/models/garch.py`),
+validated against `arch` (parameters within 2e-4, log-likelihood within 1e-6).
+
+- **GJR-GARCH(1,1)-t is preferred** by AIC and BIC. Student-t shocks and the
+  leverage term each improve the log-likelihood by over 100.
+- **Only negative shocks raise volatility:** alpha = 0 at its bound, gamma = 0.21.
+- **The symmetric GARCH-t is misspecified:** persistence 0.998 implies a
+  365-day half-life and 40% long-run volatility (sample: 19%). GJR-t gives
+  46 days and 16.7%.
+- **Residuals:** ARCH effects removed (ARCH-LM p = 0.09); excess kurtosis
+  falls from 10.6 to 2.0, matching the fitted t (nu = 6.8, implied 2.1);
+  skewness of -0.57 motivates a skewed-t distribution.
