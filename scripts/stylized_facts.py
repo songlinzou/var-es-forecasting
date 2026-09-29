@@ -21,6 +21,8 @@ from statsmodels.graphics.gofplots import qqplot
 from statsmodels.graphics.tsaplots import plot_acf
 
 from var_es.config import load_config
+from var_es.reporting import fmt as _fmt
+from var_es.reporting import md_table as _md_table
 from var_es.diagnostics import (
     arch_lm,
     autocorrelations,
@@ -154,28 +156,6 @@ def _build_report(data: pd.DataFrame, ret: pd.Series, proxy_name: str, figures: 
     ]
     lines += [f"![{title}](figures/{name})" for title, name in figures]
     return "\n".join(lines) + "\n"
-
-
-def _fmt(value) -> str:
-    if isinstance(value, (int, np.integer)):
-        return f"{value:,}"
-    if isinstance(value, (float, np.floating)):
-        if value == 0:
-            return "0"
-        if abs(value) < 1e-4:
-            return f"{value:.1e}"
-        return f"{value:,.4f}" if abs(value) < 10 else f"{value:,.1f}"
-    return str(value)
-
-
-def _md_table(df: pd.DataFrame, index_label: str = "") -> str:
-    header = "| " + " | ".join([index_label] + [str(c) for c in df.columns]) + " |"
-    divider = "|" + "---|" * (len(df.columns) + 1)
-    rows = [
-        "| " + " | ".join([str(idx)] + [_fmt(v) for v in row]) + " |"
-        for idx, row in zip(df.index, df.itertuples(index=False))
-    ]
-    return "\n".join([header, divider] + rows)
 
 
 # --- Figures --------------------------------------------------------------------------------
