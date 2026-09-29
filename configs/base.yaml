@@ -22,3 +22,7 @@ risk:
 
 returns:
   scale: 100
+
+evaluation:
+  volatility_proxy: "gk_overnight"          # main target for volatility-forecast losses
+  robustness_proxies: ["sq_ret", "parkinson"]

@@ -48,5 +48,13 @@ export TIINGO_API_KEY="your-key-here"   # free key from tiingo.com
 python scripts/download_data.py         # download the raw data snapshot
 ```
 
+## Returns and volatility proxies
+Daily log total returns from dividend-adjusted closes. Intraday range
+estimators (Parkinson, Garman-Klass) capture about two-thirds of
+close-to-close variance; adding the squared overnight return brings this
+to 1.02. Volatility forecasts are therefore evaluated against Garman-Klass
+plus the overnight term, with squared returns and Parkinson as robustness
+checks.
+
 ## Status
 Work in progress: Step 1 (data pipeline).
