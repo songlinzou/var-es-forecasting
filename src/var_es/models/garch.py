@@ -5,8 +5,9 @@ Model: constant mean with GJR-GARCH(1,1) variance.
     r_t      = mu + eps_t,        eps_t = sigma_t * z_t
     sigma2_t = omega + (alpha + gamma * 1[eps_{t-1} < 0]) * eps_{t-1}^2 + beta * sigma2_{t-1}
 
-The z_t are independent with mean 0 and variance 1: either standard normal,
-or Student-t rescaled to unit variance (nu > 2 degrees of freedom).
+The z_t are independent with mean 0 and variance 1: standard normal,
+Student-t rescaled to unit variance (nu > 2 degrees of freedom), or Hansen's
+skewed Student-t (see var_es.models.distributions).
 Setting gamma = 0 gives the symmetric GARCH(1,1).
 
 How the likelihood is built
@@ -25,6 +26,10 @@ so the log-likelihood is a simple sum over days:
 where G is the gamma function. The (nu - 2) terms come from rescaling a
 Student-t, whose variance is nu / (nu - 2), to have variance 1.
 
+In general l_t = ln g(eps_t / sigma_t) - 1/2 ln(sigma2_t), where g is the
+density of the standardized shock; the two formulas above are this with g
+normal or Student-t.
+
 Constraints: omega > 0, alpha >= 0, alpha + gamma >= 0, beta >= 0 keep the
 variance positive; alpha + gamma/2 + beta < 1 keeps it stationary (gamma is
 halved because a symmetric shock is negative half the time).
@@ -40,10 +45,11 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from scipy import optimize, signal, special
+from scipy import optimize, signal
 
-DISTRIBUTIONS = ("normal", "t")
-NU_BOUNDS = (2.05, 500.0)
+from var_es.models.distributions import DISTRIBUTIONS
+
+_VARIANCE_NAMES = ("mu", "omega", "alpha", "gamma", "beta")
 _BOUND_TOLERANCE = 1e-6
 
 
@@ -55,16 +61,20 @@ class GarchSpec:
     """Which GARCH-family model to estimate."""
 
     asymmetric: bool = False  # add the GJR leverage term gamma
-    dist: str = "normal"  # "normal" or "t"
+    dist: str = "normal"  # "normal", "t" or "skewt"
 
     def __post_init__(self) -> None:
         if self.dist not in DISTRIBUTIONS:
-            raise ValueError(f"dist must be one of {DISTRIBUTIONS}, got {self.dist!r}")
+            raise ValueError(f"dist must be one of {list(DISTRIBUTIONS)}, got {self.dist!r}")
 
     @property
     def name(self) -> str:
         variance = "GJR-GARCH(1,1)" if self.asymmetric else "GARCH(1,1)"
-        return f"{variance}-{'t' if self.dist == 't' else 'normal'}"
+        return f"{variance}-{self.dist}"
+
+    @property
+    def distribution(self):
+        return DISTRIBUTIONS[self.dist]
 
     @property
     def param_names(self) -> list[str]:
@@ -72,9 +82,7 @@ class GarchSpec:
         if self.asymmetric:
             names.append("gamma")
         names.append("beta")
-        if self.dist == "t":
-            names.append("nu")
-        return names
+        return names + self.distribution.shape_names
 
 
 # --- Core computations ------------------------------------------------------------------------
@@ -109,21 +117,15 @@ def conditional_variance(
 def log_likelihood_terms(
     params: np.ndarray, returns: np.ndarray, spec: GarchSpec, start: float
 ) -> np.ndarray:
-    """Per-day log-likelihood contributions l_t (see the module docstring)."""
+    """Per-day log-likelihood contributions l_t = ln g(z_t) - 1/2 ln(sigma2_t)."""
     p = _unpack(params, spec)
     resid = returns - p["mu"]
     sigma2 = conditional_variance(p["omega"], p["alpha"], p["gamma"], p["beta"], resid, start)
     if not np.all(np.isfinite(sigma2)) or np.any(sigma2 <= 0):
         return np.full(len(returns), -np.inf)
 
-    if spec.dist == "normal":
-        return -0.5 * (np.log(2 * np.pi) + np.log(sigma2) + resid**2 / sigma2)
-
-    nu = p["nu"]
-    const = (
-        special.gammaln((nu + 1) / 2) - special.gammaln(nu / 2) - 0.5 * np.log(np.pi * (nu - 2))
-    )
-    return const - 0.5 * np.log(sigma2) - (nu + 1) / 2 * np.log1p(resid**2 / ((nu - 2) * sigma2))
+    z = resid / np.sqrt(sigma2)
+    return spec.distribution.logpdf(z, _shape(params, spec)) - 0.5 * np.log(sigma2)
 
 
 # --- Estimation ----------------------------------------------------------------------------
@@ -147,6 +149,11 @@ class GarchResult:
     @property
     def n_params(self) -> int:
         return len(self.params)
+
+    @property
+    def shape(self) -> list[float]:
+        """Shape parameters of the shock distribution (empty for normal)."""
+        return [float(self.params[name]) for name in self.spec.distribution.shape_names]
 
     @property
     def aic(self) -> float:
@@ -246,18 +253,23 @@ def _unpack(theta: np.ndarray, spec: GarchSpec) -> dict[str, float]:
     return p
 
 
+def _shape(theta: np.ndarray, spec: GarchSpec) -> list[float]:
+    n_shape = len(spec.distribution.shape_names)
+    return list(theta[len(theta) - n_shape:]) if n_shape else []
+
+
 def _bounds(arr: np.ndarray, spec: GarchSpec) -> list[tuple[float, float]]:
     var = float(np.var(arr))
     scale = float(np.max(np.abs(arr)))
-    bounds = {
+    variance_bounds = {
         "mu": (-scale, scale),
         "omega": (1e-8 * var, 10 * var),
         "alpha": (0.0, 1.0),
         "gamma": (-1.0, 2.0),  # alpha + gamma >= 0 is imposed as a constraint
         "beta": (0.0, 1.0),
-        "nu": NU_BOUNDS,
     }
-    return [bounds[name] for name in spec.param_names]
+    names = [n for n in spec.param_names if n in _VARIANCE_NAMES]
+    return [variance_bounds[n] for n in names] + list(spec.distribution.shape_bounds)
 
 
 def _constraints(spec: GarchSpec) -> list[dict]:
@@ -278,14 +290,18 @@ def _constraints(spec: GarchSpec) -> list[dict]:
 def _starting_values(arr: np.ndarray, spec: GarchSpec) -> list[np.ndarray]:
     mu, var = float(arr.mean()), float(arr.var())
     gammas = (0.0, 0.1) if spec.asymmetric else (0.0,)
+    grid = itertools.product(
+        (0.03, 0.06, 0.1), (0.85, 0.9, 0.94), gammas, spec.distribution.shape_starts
+    )
     candidates = []
-    for alpha, beta, gamma in itertools.product((0.03, 0.06, 0.1), (0.85, 0.9, 0.94), gammas):
+    for alpha, beta, gamma, shape in grid:
         persistence = alpha + gamma / 2 + beta
         if persistence >= 0.995:
             continue
         values = {"mu": mu, "omega": var * (1 - persistence), "alpha": alpha,
-                  "gamma": gamma, "beta": beta, "nu": 8.0}
-        candidates.append(np.array([values[name] for name in spec.param_names]))
+                  "gamma": gamma, "beta": beta}
+        variance_part = [values[n] for n in spec.param_names if n in _VARIANCE_NAMES]
+        candidates.append(np.array(variance_part + list(shape)))
     return candidates
 
 

@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
+from var_es.models.distributions import SkewT
 from var_es.models.garch import (
     GarchSpec,
     backcast,
@@ -15,17 +16,27 @@ from var_es.models.garch import (
 from var_es.models.reference import fit_arch_reference
 
 ALL_SPECS = [
-    GarchSpec(asymmetric=False, dist="normal"),
-    GarchSpec(asymmetric=False, dist="t"),
-    GarchSpec(asymmetric=True, dist="normal"),
-    GarchSpec(asymmetric=True, dist="t"),
+    GarchSpec(asymmetric=asymmetric, dist=dist)
+    for asymmetric in (False, True)
+    for dist in ("normal", "t", "skewt")
 ]
 
 
-def simulate(n=5000, mu=0.05, omega=0.02, alpha=0.03, gamma=0.10, beta=0.90, nu=None, seed=0):
-    """Simulate returns from a GJR-GARCH(1,1) with normal or unit-variance t shocks."""
+def simulate(
+    n=5000, mu=0.05, omega=0.02, alpha=0.03, gamma=0.10, beta=0.90, nu=None, lam=None, seed=0
+):
+    """Simulate a GJR-GARCH(1,1) with normal, unit-variance t, or skewed-t shocks.
+
+    Skewed-t shocks are drawn by feeding uniform random numbers through the
+    quantile function (inverse transform sampling).
+    """
     rng = np.random.default_rng(seed)
-    z = rng.standard_normal(n) if nu is None else rng.standard_t(nu, n) * np.sqrt((nu - 2) / nu)
+    if lam is not None:
+        z = SkewT.ppf(rng.uniform(size=n), [nu, lam])
+    elif nu is not None:
+        z = rng.standard_t(nu, n) * np.sqrt((nu - 2) / nu)
+    else:
+        z = rng.standard_normal(n)
     eps, sigma2 = np.empty(n), np.empty(n)
     sigma2[0] = omega / (1 - alpha - gamma / 2 - beta)
     for t in range(n):
@@ -37,7 +48,8 @@ def simulate(n=5000, mu=0.05, omega=0.02, alpha=0.03, gamma=0.10, beta=0.90, nu=
 
 def _simulate_for(spec: GarchSpec, **kwargs) -> pd.Series:
     params = {"gamma": 0.10 if spec.asymmetric else 0.0, "alpha": 0.03 if spec.asymmetric else 0.08}
-    params["nu"] = 6 if spec.dist == "t" else None
+    params["nu"] = 6 if spec.dist in ("t", "skewt") else None
+    params["lam"] = -0.2 if spec.dist == "skewt" else None
     params.update(kwargs)
     return simulate(**params)
 
@@ -110,6 +122,14 @@ def test_matches_arch_package(spec):
     np.testing.assert_allclose(ours.std_errors, ref["std_errors"], rtol=0.02)
 
 
+def test_recovers_skewness_on_a_long_sample():
+    y = simulate(n=10_000, alpha=0.03, gamma=0.10, nu=6, lam=-0.25, seed=4)
+    params = fit_garch(y, GarchSpec(asymmetric=True, dist="skewt")).params
+
+    assert params["lambda"] == pytest.approx(-0.25, abs=0.05)
+    assert params["nu"] == pytest.approx(6.0, abs=1.0)
+
+
 def test_recovers_true_parameters_on_a_long_sample():
     y = simulate(n=10_000, alpha=0.03, gamma=0.10, beta=0.90, nu=6, seed=11)
     params = fit_garch(y, GarchSpec(asymmetric=True, dist="t")).params
@@ -169,8 +189,10 @@ def test_param_names():
     assert GarchSpec(asymmetric=True, dist="t").param_names == [
         "mu", "omega", "alpha", "gamma", "beta", "nu",
     ]
+    assert GarchSpec(dist="skewt").param_names == ["mu", "omega", "alpha", "beta", "nu", "lambda"]
+    assert GarchSpec(asymmetric=True, dist="skewt").name == "GJR-GARCH(1,1)-skewt"
 
 
 def test_unknown_distribution_rejected():
     with pytest.raises(ValueError, match="dist must be one of"):
-        GarchSpec(dist="skewt")
+        GarchSpec(dist="laplace")

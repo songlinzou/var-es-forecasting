@@ -7,7 +7,8 @@ import pandas as pd
 
 from var_es.models.garch import GarchSpec
 
-_ARCH_NAMES = {"alpha[1]": "alpha", "gamma[1]": "gamma", "beta[1]": "beta"}
+_ARCH_NAMES = {"alpha[1]": "alpha", "gamma[1]": "gamma", "beta[1]": "beta", "eta": "nu"}
+_ARCH_DISTS = {"normal": "normal", "t": "t", "skewt": "skewt"}
 
 
 def fit_arch_reference(returns: pd.Series, spec: GarchSpec) -> dict:
@@ -21,7 +22,7 @@ def fit_arch_reference(returns: pd.Series, spec: GarchSpec) -> dict:
         p=1,
         o=1 if spec.asymmetric else 0,
         q=1,
-        dist="t" if spec.dist == "t" else "normal",
+        dist=_ARCH_DISTS[spec.dist],
         rescale=False,
     )
     result = model.fit(disp="off")

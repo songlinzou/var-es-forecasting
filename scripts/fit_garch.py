@@ -4,8 +4,9 @@ Run from the project root, with the virtual environment active:
 
     python scripts/fit_garch.py
 
-For each model (GARCH and GJR-GARCH, with normal and Student-t shocks) this
-reports estimates with robust standard errors, compares fit, checks the
+For each model (GARCH and GJR-GARCH, with normal, Student-t and skewed-t
+shocks) this reports estimates with robust standard errors, compares fit,
+runs likelihood-ratio tests for leverage and skewness, checks the
 standardized residuals with the Step 1.6 diagnostics, and confirms the
 from-scratch estimates agree with the `arch` package. Only data before the
 locked test period is used.
@@ -22,6 +23,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 from var_es.config import load_config
 from var_es.diagnostics import arch_lm, distribution_summary, ljung_box
@@ -35,10 +37,9 @@ REPORT_PATH = PROJECT_ROOT / "reports" / "garch_in_sample.md"
 FIGURE_PATH = PROJECT_ROOT / "reports" / "figures" / "garch_conditional_volatility.png"
 
 SPECS = [
-    GarchSpec(asymmetric=False, dist="normal"),
-    GarchSpec(asymmetric=False, dist="t"),
-    GarchSpec(asymmetric=True, dist="normal"),
-    GarchSpec(asymmetric=True, dist="t"),
+    GarchSpec(asymmetric=asymmetric, dist=dist)
+    for asymmetric in (False, True)
+    for dist in ("normal", "t", "skewt")
 ]
 
 
@@ -54,7 +55,8 @@ def main() -> None:
     fits = {spec.name: fit_garch(ret, spec) for spec in SPECS}
     references = {spec.name: fit_arch_reference(ret, spec) for spec in SPECS}
 
-    _plot_volatility(ret, fits[SPECS[-1].name])
+    best = min(fits.values(), key=lambda fit: fit.bic)
+    _plot_volatility(ret, best)
     report = _build_report(ret, fits, references)
     REPORT_PATH.write_text(report, encoding="utf-8")
     print(report)
@@ -65,7 +67,7 @@ def _build_report(ret: pd.Series, fits: dict, references: dict) -> str:
     names = list(fits)
 
     # Parameter estimates with robust standard errors.
-    all_params = ["mu", "omega", "alpha", "gamma", "beta", "nu"]
+    all_params = ["mu", "omega", "alpha", "gamma", "beta", "nu", "lambda"]
     estimates = pd.DataFrame(index=all_params, columns=names, dtype=object)
     for name, fit in fits.items():
         for param in all_params:
@@ -89,6 +91,8 @@ def _build_report(ret: pd.Series, fits: dict, references: dict) -> str:
             for name, fit in fits.items()
         }
     )
+
+    lr_tests = _likelihood_ratio_tests(fits)
 
     diagnostics = {"raw returns": _residual_checks(ret - ret.mean())}
     diagnostics.update({name: _residual_checks(fit.std_resid) for name, fit in fits.items()})
@@ -137,6 +141,14 @@ def _build_report(ret: pd.Series, fits: dict, references: dict) -> str:
         "",
         f"Lowest AIC: **{best_aic}**. Lowest BIC: **{best_bic}**.",
         "",
+        "## Likelihood-ratio tests",
+        "",
+        "Each row tests one restriction of a larger model against the data: no leverage "
+        "(gamma = 0) or no skewness (lambda = 0). The statistic 2 x (log-likelihood gain) is "
+        "compared with a chi-squared distribution with 1 degree of freedom.",
+        "",
+        md_table(lr_tests, index_label="restriction tested"),
+        "",
         "## Standardized residual diagnostics",
         "",
         "If a model captures the volatility dynamics, its standardized residuals should show "
@@ -159,6 +171,27 @@ def _build_report(ret: pd.Series, fits: dict, references: dict) -> str:
         f"![Conditional volatility](figures/{FIGURE_PATH.name})",
     ]
     return "\n".join(lines) + "\n"
+
+
+def _likelihood_ratio_tests(fits: dict) -> pd.DataFrame:
+    """LR tests for the nested pairs: GARCH vs GJR (gamma = 0), t vs skewed-t (lambda = 0)."""
+    by_spec = {(fit.spec.asymmetric, fit.spec.dist): fit for fit in fits.values()}
+    pairs = [
+        (f"gamma = 0, {dist} shocks", (False, dist), (True, dist)) for dist in ("normal", "t", "skewt")
+    ] + [
+        (f"lambda = 0, {'GJR-GARCH' if asym else 'GARCH'}", (asym, "t"), (asym, "skewt"))
+        for asym in (False, True)
+    ]
+    rows = {}
+    for label, small, large in pairs:
+        statistic = 2 * (by_spec[large].loglik - by_spec[small].loglik)
+        rows[label] = {
+            "restricted model": by_spec[small].spec.name,
+            "full model": by_spec[large].spec.name,
+            "LR statistic": statistic,
+            "p-value": float(stats.chi2.sf(statistic, df=1)),
+        }
+    return pd.DataFrame.from_dict(rows, orient="index")
 
 
 def _residual_checks(z: pd.Series) -> dict:
