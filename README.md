@@ -20,6 +20,19 @@ Sources considered and not used:
 - **Stooq**: its S&P 500 symbol now points to a CFD ("US LargeCap"), not
   the official index, and it blocks automated downloads.
 
+## Data quality
+Checks are in `src/var_es/data/quality.py`; run `python scripts/check_data.py`.
+
+- 6,705 daily observations, matching the NYSE trading calendar exactly
+  (no missing or extra days).
+- No internal inconsistencies: all highs and lows contain the open and close,
+  and the adjustment factor changes only on the 107 dividend dates... 
+- 13 days with absolute log returns above 7%, all matching known market
+  events (autumn 2008, March 2020, April 2025). All are kept: they are the
+  tail events VaR and ES are meant to capture.
+- Sample periods: 1,004 trading days before development (window: 1,000),
+  4,027 in development, 1,674 in the locked test.
+
 ## Installation
 ```bash
 git clone https://github.com/songlinzou/var-es-forecasting.git
