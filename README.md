@@ -91,3 +91,10 @@ validated against `arch` (parameters within 2e-4, log-likelihood within 1e-6).
 - **Residuals:** ARCH effects removed (ARCH-LM p = 0.09); excess kurtosis
   falls from 10.6 to 2.0, matching the fitted t (nu = 6.8, implied 2.1);
   skewness of -0.57 motivates a skewed-t distribution.
+- **Skewed Student-t (Hansen, 1994) preferred:** GJR-GARCH-skewt has the lowest
+  AIC and BIC (BIC 54 below GJR-t). lambda = -0.15 (t = -8.5; LR test p = 3e-15).
+  Leverage and persistence are essentially unchanged.
+- The fitted skewed-t implies skewness -0.43 and excess kurtosis 1.96, close to
+  the residuals' -0.57 and 2.02.
+- For the same variance, the skewed-t 1% quantile (-2.75) implies a 99% VaR
+  18% larger than under normal shocks (-2.33).
