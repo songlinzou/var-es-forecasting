@@ -9,6 +9,7 @@ requires-python = ">=3.10"
 dependencies = [
     "numpy", "pandas", "scipy", "matplotlib",
     "statsmodels", "arch", "pyyaml", "pyarrow",
+    "pandas_market_calendars",
 ]
 
 [project.optional-dependencies]
