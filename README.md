@@ -131,3 +131,18 @@ Diebold–Mariano tests vs GJR-GARCH-skewt; 90% Model Confidence Set (stationary
   improves tail-risk forecasts; VaR and ES need both.
 - 99% tick loss has little power (six models in the MCS), illustrating why
   backtests and loss comparisons are complementary.
+
+## GARCH-MIDAS, in-sample (2000–2019)
+Full report: [reports/midas_in_sample.md](reports/midas_in_sample.md).
+GJR-GARCH-MIDAS with skewed-t shocks, one macro variable per model,
+12 monthly lags known in real time.
+
+- **Credit spread:** theta = 0.60 (t = 5.4); +1 sd raises long-run volatility by 24%;
+  the long-run component explains 19% of the variation in log variance; AIC and BIC
+  both improve. Persistence of the short-run component falls from 0.987 to 0.976.
+- **Term spread:** theta = 0.19 (t = 2.9); a steeper curve coincides with high-volatility
+  easing cycles. BIC prefers the baseline.
+- **Industrial production growth:** theta = -0.73 (t = -2.2); not significant after a
+  Bonferroni correction for three variables.
+- **Caveat:** credit spreads are market prices that partly reflect equity volatility,
+  so they are a market-implied risk indicator rather than pure macro fundamentals.
