@@ -198,11 +198,36 @@ class GarchResult:
         )
 
 
-def fit_garch(returns: pd.Series, spec: GarchSpec = GarchSpec()) -> GarchResult:
+def one_step_variance(params: pd.Series, spec: GarchSpec, returns: np.ndarray) -> float:
+    """Variance forecast for the day after `returns`, using fixed parameters.
+
+    Runs the recursion over `returns` with the same backcast convention as
+    fit_garch, so at a refit date it equals GarchResult.forecast_variance().
+    """
+    arr = np.asarray(returns, dtype=float)
+    p = {"gamma": 0.0, **params.to_dict()}
+    resid = arr - p["mu"]
+    start = backcast(arr - arr.mean())
+    sigma2 = conditional_variance(p["omega"], p["alpha"], p["gamma"], p["beta"], resid, start)
+    last = resid[-1]
+    return float(
+        p["omega"] + (p["alpha"] + p["gamma"] * (last < 0)) * last**2 + p["beta"] * sigma2[-1]
+    )
+
+
+def fit_garch(
+    returns: pd.Series,
+    spec: GarchSpec = GarchSpec(),
+    start_params: pd.Series | None = None,
+    std_errors: bool = True,
+) -> GarchResult:
     """Estimate a GARCH-family model by maximum likelihood.
 
     Uses SLSQP (which handles the stationarity inequality constraint) from the
-    best of a small grid of starting values.
+    best of a small grid of starting values. If start_params is given (for
+    example the previous estimate in a rolling window), it is added to the grid.
+    Set std_errors=False to skip the standard errors (about half the run time)
+    when only the estimates are needed, as in rolling re-estimation.
     """
     y = pd.Series(returns, dtype=float).dropna()
     arr = y.to_numpy()
@@ -213,7 +238,12 @@ def fit_garch(returns: pd.Series, spec: GarchSpec = GarchSpec()) -> GarchResult:
         value = -np.mean(log_likelihood_terms(theta, arr, spec, start))
         return value if np.isfinite(value) else 1e10
 
-    x0 = min(_starting_values(arr, spec), key=objective)
+    candidates = _starting_values(arr, spec)
+    if start_params is not None:
+        warm = np.clip(start_params[spec.param_names].to_numpy(dtype=float),
+                       [lo for lo, _ in bounds], [hi for _, hi in bounds])
+        candidates.append(warm)
+    x0 = min(candidates, key=objective)
     result = optimize.minimize(
         objective,
         x0,
@@ -232,7 +262,10 @@ def fit_garch(returns: pd.Series, spec: GarchSpec = GarchSpec()) -> GarchResult:
         spec=spec,
         params=pd.Series(theta, index=spec.param_names),
         std_errors=pd.Series(
-            _robust_std_errors(theta, arr, spec, start, bounds), index=spec.param_names
+            _robust_std_errors(theta, arr, spec, start, bounds)
+            if std_errors
+            else np.full(len(theta), np.nan),
+            index=spec.param_names,
         ),
         loglik=float(terms.sum()),
         n_obs=len(arr),

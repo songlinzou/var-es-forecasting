@@ -26,3 +26,8 @@ returns:
 evaluation:
   volatility_proxy: "gk_overnight"          # main target for volatility-forecast losses
   robustness_proxies: ["sq_ret", "parkinson"]
+
+forecasting:
+  refit_every: 5              # trading days between parameter re-estimations
+  historical_window: 250      # trading days used by historical simulation
+  ewma_lambda: 0.94           # RiskMetrics decay factor
