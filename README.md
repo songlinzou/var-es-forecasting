@@ -98,3 +98,21 @@ validated against `arch` (parameters within 2e-4, log-likelihood within 1e-6).
   the residuals' -0.57 and 2.02.
 - For the same variance, the skewed-t 1% quantile (-2.75) implies a 99% VaR
   18% larger than under normal shocks (-2.33).
+
+## Backtests (development period, 2004–2019)
+Full report: [reports/backtests_development.md](reports/backtests_development.md).
+9 models, 4,027 one-day forecasts, rolling 1,000-day window, weekly re-estimation.
+
+- **Two models pass all 8 tests:** GJR-GARCH-skewt (41 exceptions at 99% vs 40.3
+  expected) and filtered historical simulation.
+- **Tail shape drives 99% VaR:** all normal-based models fail (2.2–2.5% exceptions);
+  Student-t models fail (1.5–1.7%); skewed-t models pass.
+- **Leverage drives 97.5% VaR:** GARCH-skewt fails (3.35%); GJR-skewt passes (2.88%).
+- **Only historical simulation fails independence:** P(exception | exception yesterday)
+  = 8.2%, reflecting its slow reaction to volatility changes.
+- **ES:** McNeil–Frey passes for all t and skewed-t models (tail sizes are right);
+  Z2 still rejects the Student-t models because of too many exceptions.
+- **Test sizes checked by simulation:** the ES tests use a studentized bootstrap;
+  the textbook versions rejected a correct model only 1–2.5% of the time at 5%.
+- **Caveat:** GJR-skewt was selected on in-sample fit over an overlapping period;
+  the locked test period (2020–2026) provides the unbiased check.
