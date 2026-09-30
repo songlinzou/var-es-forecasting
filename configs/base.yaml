@@ -31,3 +31,9 @@ forecasting:
   refit_every: 5              # trading days between parameter re-estimations
   historical_window: 250      # trading days used by historical simulation
   ewma_lambda: 0.94           # RiskMetrics decay factor
+
+comparison:
+  benchmark: "GJR-GARCH(1,1)-skewt"   # Diebold-Mariano tests compare every model with this one
+  mcs_confidence: 0.90                 # Model Confidence Set level
+  block_length: 10                     # mean block length (days) of the stationary bootstrap
+  bootstrap_reps: 10000
