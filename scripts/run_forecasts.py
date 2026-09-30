@@ -1,19 +1,22 @@
-"""Rolling one-day-ahead VaR and ES forecasts over the development period.
+"""Rolling one-day-ahead VaR and ES forecasts.
 
 Run from the project root, with the virtual environment active:
 
-    python scripts/run_forecasts.py
+    python scripts/run_forecasts.py                        # development period
+    python scripts/run_forecasts.py --period locked_test   # the one-time locked test
 
 Runs nine models: historical simulation, EWMA, filtered historical
 simulation, and six GARCH-family models (re-estimated every few days on a
-rolling window). Only returns before the locked test period are loaded.
+rolling window). For the development period, returns from the locked test
+period are never loaded. Every forecast uses only returns before its date.
 
-Writes (not committed to Git):
-    data/processed/forecasts_development.parquet     one row per model and day
-    data/processed/refit_params_development.parquet  parameters at each refit
+Writes (not committed to Git), with PERIOD = development or locked_test:
+    data/processed/forecasts_PERIOD.parquet      one row per model and day
+    data/processed/refit_params_PERIOD.parquet   parameters at each refit
 and a summary with a figure in reports/ (committed).
 """
 
+import argparse
 import time
 from pathlib import Path
 
@@ -27,6 +30,7 @@ import pandas as pd
 
 from var_es.config import load_config
 from var_es.models.garch import GarchSpec
+from var_es.periods import LABELS, guard_locked_test, period_bounds, period_note, returns_for_period
 from var_es.reporting import md_table
 from var_es.risk.forecasting import (
     ForecastSettings,
@@ -38,10 +42,15 @@ from var_es.risk.forecasting import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "returns_and_proxies.parquet"
-FORECAST_PATH = PROJECT_ROOT / "data" / "processed" / "forecasts_development.parquet"
-PARAMS_PATH = PROJECT_ROOT / "data" / "processed" / "refit_params_development.parquet"
-REPORT_PATH = PROJECT_ROOT / "reports" / "forecasts_development.md"
-FIGURE_PATH = PROJECT_ROOT / "reports" / "figures" / "var_forecasts_development.png"
+
+
+def output_paths(period: str) -> dict[str, Path]:
+    return {
+        "forecasts": PROJECT_ROOT / "data" / "processed" / f"forecasts_{period}.parquet",
+        "params": PROJECT_ROOT / "data" / "processed" / f"refit_params_{period}.parquet",
+        "report": PROJECT_ROOT / "reports" / f"forecasts_{period}.md",
+        "figure": PROJECT_ROOT / "reports" / "figures" / f"var_forecasts_{period}.png",
+    }
 
 GARCH_SPECS = [
     GarchSpec(asymmetric=asymmetric, dist=dist)
@@ -60,6 +69,14 @@ forecasting:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Rolling VaR and ES forecasts.")
+    parser.add_argument("--period", choices=list(LABELS), default="development")
+    parser.add_argument("--allow-rerun", action="store_true",
+                        help="overwrite existing locked-test outputs (identical settings only)")
+    args = parser.parse_args()
+    paths = output_paths(args.period)
+    guard_locked_test(args.period, [paths["forecasts"]], args.allow_rerun)
+
     cfg = load_config(PROJECT_ROOT / "configs" / "base.yaml")
     try:
         settings = ForecastSettings.from_config(cfg)
@@ -68,13 +85,10 @@ def main() -> None:
     if not DATA_PATH.is_file():
         raise SystemExit(f"{DATA_PATH} not found. Run scripts/build_returns.py first.")
 
-    test_start = pd.Timestamp(cfg["sample_split"]["locked_test"][0])
-    returns = pd.read_parquet(DATA_PATH)["ret"]
-    returns = returns[returns.index < test_start]  # the locked test is never loaded
-
-    dev_start, dev_end = cfg["sample_split"]["development"]
-    dates = forecast_dates(returns.index, dev_start, dev_end, settings.window)
-    print(f"Forecasting {len(dates):,} days, {dates[0].date()} to {dates[-1].date()}\n")
+    returns = returns_for_period(pd.read_parquet(DATA_PATH)["ret"], cfg, args.period)
+    dates = forecast_dates(returns.index, *period_bounds(cfg, args.period), settings.window)
+    print(f"Forecasting the {LABELS[args.period]}: {len(dates):,} days, "
+          f"{dates[0].date()} to {dates[-1].date()}\n")
 
     forecasts, params = {}, {}
     forecasts[f"HS-{settings.historical_window}"] = _timed(
@@ -98,15 +112,16 @@ def main() -> None:
 
     all_forecasts = pd.concat(forecasts, names=["model", "date"])
     all_params = pd.concat(params, names=["model", "date"])
-    FORECAST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    all_forecasts.to_parquet(FORECAST_PATH)
-    all_params.to_parquet(PARAMS_PATH)
+    paths["forecasts"].parent.mkdir(parents=True, exist_ok=True)
+    all_forecasts.to_parquet(paths["forecasts"])
+    all_params.to_parquet(paths["params"])
 
-    report = _build_report(all_forecasts, all_params, settings, dates)
-    REPORT_PATH.write_text(report, encoding="utf-8")
-    _plot(all_forecasts, settings)
+    report = _build_report(all_forecasts, all_params, settings, dates, args.period, paths["figure"])
+    paths["report"].write_text(report, encoding="utf-8")
+    _plot(all_forecasts, settings, paths["figure"])
     print("\n" + report)
-    print(f"Saved {FORECAST_PATH.relative_to(PROJECT_ROOT)} and {REPORT_PATH.relative_to(PROJECT_ROOT)}.")
+    print(f"Saved {paths['forecasts'].relative_to(PROJECT_ROOT)} and "
+          f"{paths['report'].relative_to(PROJECT_ROOT)}.")
 
 
 def _timed(label: str, run):
@@ -124,7 +139,8 @@ def _progress_printer(label: str):
     return show
 
 
-def _build_report(forecasts: pd.DataFrame, params: pd.DataFrame, settings, dates) -> str:
+def _build_report(forecasts: pd.DataFrame, params: pd.DataFrame, settings, dates,
+                  period: str, figure_path: Path) -> str:
     rows = {}
     for model, df in forecasts.groupby(level="model", sort=False):
         row = {}
@@ -143,11 +159,11 @@ def _build_report(forecasts: pd.DataFrame, params: pd.DataFrame, settings, dates
     )
 
     lines = [
-        "# Rolling VaR and ES forecasts: development period",
+        f"# Rolling VaR and ES forecasts: {LABELS[period]}",
         "",
         f"{len(dates):,} one-day-ahead forecasts, {dates[0].date()} to {dates[-1].date()}. "
         f"GARCH-family models are re-estimated every {settings.refit_every} days on a rolling "
-        f"{settings.window}-day window. The locked test period is not used.",
+        f"{settings.window}-day window. {period_note(period)}",
         "",
         "VaR and ES are positive losses in percent. An exception is a day whose loss exceeds "
         "the VaR forecast. These rates are a first look; formal backtests follow in Step 3.2.",
@@ -160,18 +176,18 @@ def _build_report(forecasts: pd.DataFrame, params: pd.DataFrame, settings, dates
         "",
         "A failed refit keeps the previous parameters.",
         "",
-        f"![VaR forecasts](figures/{FIGURE_PATH.name})",
+        f"![VaR forecasts](figures/{figure_path.name})",
     ]
     return "\n".join(lines) + "\n"
 
 
-def _plot(forecasts: pd.DataFrame, settings) -> None:
+def _plot(forecasts: pd.DataFrame, settings, figure_path: Path) -> None:
     level = max(settings.var_levels)
     models = [m for m in forecasts.index.get_level_values("model").unique()
               if m.startswith(("HS", "EWMA")) or m == "GJR-GARCH(1,1)-skewt"]
     ret = forecasts.xs(models[0], level="model")["ret"]
 
-    FIGURE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    figure_path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(ret.index, ret, linewidth=0.4, color="0.7", label="daily return")
     for model in models:
@@ -181,7 +197,7 @@ def _plot(forecasts: pd.DataFrame, settings) -> None:
     ax.set_title(f"One-day {level:.0%} VaR forecasts (shown as negative returns)")
     ax.legend(loc="lower left", frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig(FIGURE_PATH, dpi=150)
+    fig.savefig(figure_path, dpi=150)
     plt.close(fig)
 
 

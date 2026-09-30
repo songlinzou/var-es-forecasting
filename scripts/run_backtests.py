@@ -36,6 +36,7 @@ from var_es.backtest.var_tests import (
     traffic_light,
 )
 from var_es.config import load_config
+from var_es.periods import LABELS, period_note
 from var_es.reporting import md_table
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Backtest VaR and ES forecasts.")
     parser.add_argument("--forecasts", type=Path, default=FORECAST_PATH, help="forecast parquet file")
     parser.add_argument("--report", default=REPORT_PATH.stem, help="report name (written to reports/)")
+    parser.add_argument("--period", choices=list(LABELS), default="development",
+                        help="which period the forecasts cover (for the report text)")
     args = parser.parse_args()
 
     if args.report != REPORT_PATH.stem:
@@ -70,8 +73,8 @@ def main() -> None:
     es_tables = {level: _es_table(forecasts, models, level) for level in es_levels}
     verdicts = _verdicts(var_tables, es_tables, models)
 
-    n_days = len(forecasts.xs(models[0], level="model"))
-    report = _build_report(var_tables, es_tables, verdicts, n_days, n_tests=verdicts.shape[1] - 1)
+    dates = forecasts.xs(models[0], level="model").index
+    report = _build_report(var_tables, es_tables, verdicts, dates, verdicts.shape[1] - 1, args.period)
     REPORT_PATH.write_text(report, encoding="utf-8")
     _plot_traffic_light(forecasts, max(var_levels))
     print(report)
@@ -142,13 +145,13 @@ def _verdicts(var_tables: dict, es_tables: dict, models: list) -> pd.DataFrame:
 
 
 def _build_report(
-    var_tables: dict, es_tables: dict, verdicts: pd.DataFrame, n_days: int, n_tests: int
+    var_tables: dict, es_tables: dict, verdicts: pd.DataFrame, dates, n_tests: int, period: str
 ) -> str:
     lines = [
-        "# Backtests: development period",
+        f"# Backtests: {LABELS[period]}",
         "",
-        f"{n_days:,} one-day-ahead forecasts per model (2004-2019). Tests at the "
-        f"{SIGNIFICANCE:.0%} level. The locked test period is not used.",
+        f"{len(dates):,} one-day-ahead forecasts per model ({dates.min().date()} to "
+        f"{dates.max().date()}). Tests at the {SIGNIFICANCE:.0%} level. {period_note(period)}",
         "",
         "## Summary",
         "",

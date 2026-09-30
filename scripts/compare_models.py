@@ -7,7 +7,7 @@ Run from the project root, with the virtual environment active:
 For each loss (tick loss for VaR, FZ0 for VaR and ES jointly, QLIKE for
 variance), reports average losses, Diebold-Mariano tests against the
 benchmark model, and the Model Confidence Set. Uses the forecasts from
-run_forecasts.py; the locked test period is not used.
+run_forecasts.py (or any forecast file given with --forecasts).
 
 Writes reports/model_comparison_development.md and a figure. To compare
 another forecast file against a different benchmark, e.g. the macro models:
@@ -34,6 +34,7 @@ from var_es.evaluation.comparison import (
     model_confidence_set,
 )
 from var_es.evaluation.losses import fz0_loss, mse_variance, qlike, quantile_loss
+from var_es.periods import LABELS, period_note
 from var_es.reporting import md_table
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +67,8 @@ def main() -> None:
     parser.add_argument("--forecasts", type=Path, default=FORECAST_PATH, help="forecast parquet file")
     parser.add_argument("--report", default=REPORT_PATH.stem, help="report name (written to reports/)")
     parser.add_argument("--benchmark", help="benchmark model (default: comparison.benchmark in the config)")
+    parser.add_argument("--period", choices=list(LABELS), default="development",
+                        help="which period the forecasts cover (for the report text)")
     args = parser.parse_args()
 
     if args.report != REPORT_PATH.stem:
@@ -98,8 +101,8 @@ def main() -> None:
         name: _compare(table, settings) for name, (table, _) in losses.items()
     }
 
-    n_days = len(next(iter(losses.values()))[0])
-    report = _build_report(losses, results, settings, n_days)
+    dates = next(iter(losses.values()))[0].index
+    report = _build_report(losses, results, settings, dates, args.period)
     REPORT_PATH.write_text(report, encoding="utf-8")
     _plot_cumulative(losses, settings)
     print(report)
@@ -190,7 +193,7 @@ def _compare(table: pd.DataFrame, settings: ComparisonSettings) -> pd.DataFrame:
     return pd.DataFrame.from_dict(rows, orient="index").sort_values("rank")
 
 
-def _build_report(losses, results, settings, n_days) -> str:
+def _build_report(losses, results, settings, dates, period) -> str:
     level = f"{settings.mcs_confidence:.0%}"
     all_models = sorted({m for table, _ in losses.values() for m in table.columns})
     summary = pd.DataFrame(index=all_models)
@@ -203,15 +206,16 @@ def _build_report(losses, results, settings, n_days) -> str:
     summary = summary.sort_values(summary.columns[2], key=lambda s: s.str.extract(r"(\d+)")[0].astype(float))
 
     lines = [
-        "# Model comparison: development period",
+        f"# Model comparison: {LABELS[period]}",
         "",
-        f"{n_days:,} one-day-ahead forecasts per model (2004-2019). Lower loss is better. "
+        f"{len(dates):,} one-day-ahead forecasts per model ({dates.min().date()} to "
+        f"{dates.max().date()}). Lower loss is better. "
         f"Diebold-Mariano (DM) tests compare each model with the benchmark, "
         f"**{settings.benchmark}**, using Newey-West standard errors; a positive DM t means "
         f"the model has higher loss than the benchmark. The Model Confidence Set (MCS, "
         f"{level}) uses a stationary bootstrap with mean block length "
         f"{settings.block_length} and {settings.bootstrap_reps:,} replications. "
-        "The locked test period is not used.",
+        f"{period_note(period)}",
         "",
         "## Summary",
         "",

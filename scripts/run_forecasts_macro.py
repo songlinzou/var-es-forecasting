@@ -2,23 +2,26 @@
 
 Run from the project root, with the virtual environment active:
 
-    python scripts/run_forecasts_macro.py
+    python scripts/run_forecasts_macro.py                        # development period
+    python scripts/run_forecasts_macro.py --period locked_test   # the one-time locked test
 
-Forecasts the development period (2004-2019) with an expanding window from
-2000: the GJR-GARCH-skewt baseline and one GJR-GARCH-MIDAS-skewt model per
-macro variable, all re-estimated every few days. Only data before the locked
-test period is used.
+Forecasts with an expanding window from 2000: the GJR-GARCH-skewt baseline
+and one GJR-GARCH-MIDAS-skewt model per macro variable, all re-estimated
+every few days. For the development period, returns from the locked test
+period are never loaded. Every forecast uses only returns before its date
+and macro values released before its month began.
 
-Writes (not committed):
-    data/processed/forecasts_macro_development.parquet
-    data/processed/refit_params_macro_development.parquet
-and reports/forecasts_macro_development.md with a figure of the real-time
-theta estimates. Evaluate the forecasts with:
+Writes (not committed), with PERIOD = development or locked_test:
+    data/processed/forecasts_macro_PERIOD.parquet
+    data/processed/refit_params_macro_PERIOD.parquet
+and reports/forecasts_macro_PERIOD.md with a figure of the real-time theta
+estimates. Evaluate the development forecasts with:
 
     python scripts/run_backtests.py --forecasts data/processed/forecasts_macro_development.parquet --report backtests_macro_development
     python scripts/compare_models.py --forecasts data/processed/forecasts_macro_development.parquet --report model_comparison_macro_development --benchmark "GJR-GARCH(1,1)-skewt (expanding)"
 """
 
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -33,16 +36,23 @@ from var_es.config import load_config
 from var_es.data.macro import MacroSettings, available_lags, build_macro, load_macro_snapshot
 from var_es.models.garch import GarchSpec
 from var_es.models.midas import MidasSpec
+from var_es.periods import LABELS, guard_locked_test, period_bounds, period_note, returns_for_period
 from var_es.reporting import md_table
 from var_es.risk.forecasting import ForecastSettings, forecast_dates, garch_forecasts
 from var_es.risk.macro_forecasting import midas_forecasts
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "returns_and_proxies.parquet"
-FORECAST_PATH = PROJECT_ROOT / "data" / "processed" / "forecasts_macro_development.parquet"
-PARAMS_PATH = PROJECT_ROOT / "data" / "processed" / "refit_params_macro_development.parquet"
-REPORT_PATH = PROJECT_ROOT / "reports" / "forecasts_macro_development.md"
-FIGURE_PATH = PROJECT_ROOT / "reports" / "figures" / "midas_theta_paths.png"
+
+
+def output_paths(period: str) -> dict[str, Path]:
+    figure = "midas_theta_paths.png" if period == "development" else f"midas_theta_paths_{period}.png"
+    return {
+        "forecasts": PROJECT_ROOT / "data" / "processed" / f"forecasts_macro_{period}.parquet",
+        "params": PROJECT_ROOT / "data" / "processed" / f"refit_params_macro_{period}.parquet",
+        "report": PROJECT_ROOT / "reports" / f"forecasts_macro_{period}.md",
+        "figure": PROJECT_ROOT / "reports" / "figures" / figure,
+    }
 
 BASELINE = GarchSpec(asymmetric=True, dist="skewt")
 BASELINE_NAME = f"{BASELINE.name} (expanding)"
@@ -50,17 +60,22 @@ MIDAS = MidasSpec("skewt")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Macro-augmented VaR and ES forecasts.")
+    parser.add_argument("--period", choices=list(LABELS), default="development")
+    parser.add_argument("--allow-rerun", action="store_true",
+                        help="overwrite existing locked-test outputs (identical settings only)")
+    args = parser.parse_args()
+    paths = output_paths(args.period)
+    guard_locked_test(args.period, [paths["forecasts"]], args.allow_rerun)
+
     cfg = load_config(PROJECT_ROOT / "configs" / "base.yaml")
     settings = ForecastSettings.from_config(cfg)
     macro_settings = MacroSettings.from_config(cfg)
 
-    test_start = pd.Timestamp(cfg["sample_split"]["locked_test"][0])
-    returns = pd.read_parquet(DATA_PATH)["ret"]
-    returns = returns[returns.index < test_start]  # the locked test is never loaded
-
-    dev_start, dev_end = cfg["sample_split"]["development"]
-    dates = forecast_dates(returns.index, dev_start, dev_end, settings.window)
-    print(f"Forecasting {len(dates):,} days, {dates[0].date()} to {dates[-1].date()}, expanding window\n")
+    returns = returns_for_period(pd.read_parquet(DATA_PATH)["ret"], cfg, args.period)
+    dates = forecast_dates(returns.index, *period_bounds(cfg, args.period), settings.window)
+    print(f"Forecasting the {LABELS[args.period]}: {len(dates):,} days, "
+          f"{dates[0].date()} to {dates[-1].date()}, expanding window\n")
 
     months = pd.PeriodIndex(returns.index.to_period("M").unique(), name="month")
     monthly = build_macro(load_macro_snapshot(macro_settings, PROJECT_ROOT / "data" / "raw"), macro_settings)
@@ -81,18 +96,19 @@ def main() -> None:
         forecasts[label], params[label] = run["forecasts"], run["params"]
 
     all_forecasts = pd.concat(forecasts, names=["model", "date"])
-    FORECAST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    all_forecasts.to_parquet(FORECAST_PATH)
-    pd.concat(params, names=["model", "date"]).to_parquet(PARAMS_PATH)
+    paths["forecasts"].parent.mkdir(parents=True, exist_ok=True)
+    all_forecasts.to_parquet(paths["forecasts"])
+    pd.concat(params, names=["model", "date"]).to_parquet(paths["params"])
 
-    report = _build_report(all_forecasts, params, settings, dates)
-    REPORT_PATH.write_text(report, encoding="utf-8")
-    _plot_theta(params)
+    report = _build_report(all_forecasts, params, settings, dates, args.period, paths["figure"])
+    paths["report"].write_text(report, encoding="utf-8")
+    _plot_theta(params, paths["figure"])
     print("\n" + report)
-    print(f"Saved {FORECAST_PATH.relative_to(PROJECT_ROOT)} and {REPORT_PATH.relative_to(PROJECT_ROOT)}.")
+    print(f"Saved {paths['forecasts'].relative_to(PROJECT_ROOT)} and "
+          f"{paths['report'].relative_to(PROJECT_ROOT)}.")
 
 
-def _build_report(forecasts, params, settings, dates) -> str:
+def _build_report(forecasts, params, settings, dates, period, figure_path) -> str:
     rows = {}
     for model, df in forecasts.groupby(level="model", sort=False):
         row = {}
@@ -117,11 +133,11 @@ def _build_report(forecasts, params, settings, dates) -> str:
         for model, p in params.items() if "theta" in p
     }
     lines = [
-        "# Macro-augmented forecasts: development period",
+        f"# Macro-augmented forecasts: {LABELS[period]}",
         "",
         f"{len(dates):,} one-day-ahead forecasts, {dates[0].date()} to {dates[-1].date()}. "
         f"All models use an expanding window from 2000 and are re-estimated every "
-        f"{settings.refit_every} days. The locked test period is not used.",
+        f"{settings.refit_every} days. {period_note(period)}",
         "",
         md_table(pd.DataFrame.from_dict(rows, orient="index"), index_label="model"),
         "",
@@ -131,15 +147,15 @@ def _build_report(forecasts, params, settings, dates) -> str:
         "",
         md_table(pd.DataFrame.from_dict(theta, orient="index"), index_label="model"),
         "",
-        "Formal evaluation: backtests_macro_development.md and model_comparison_macro_development.md.",
+        f"Formal evaluation: backtests_macro_{period}.md and model_comparison_macro_{period}.md.",
         "",
-        f"![Real-time theta](figures/{FIGURE_PATH.name})",
+        f"![Real-time theta](figures/{figure_path.name})",
     ]
     return "\n".join(lines) + "\n"
 
 
-def _plot_theta(params) -> None:
-    FIGURE_PATH.parent.mkdir(parents=True, exist_ok=True)
+def _plot_theta(params, figure_path: Path) -> None:
+    figure_path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 3.8))
     for model, p in params.items():
         if "theta" in p:
@@ -149,7 +165,7 @@ def _plot_theta(params) -> None:
     ax.set_title("Real-time estimates of the macro coefficient (expanding window)")
     ax.legend(loc="best", frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig(FIGURE_PATH, dpi=150)
+    fig.savefig(figure_path, dpi=150)
     plt.close(fig)
 
 
