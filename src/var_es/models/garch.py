@@ -48,9 +48,9 @@ import pandas as pd
 from scipy import optimize, signal
 
 from var_es.models.distributions import DISTRIBUTIONS
+from var_es.models.inference import robust_std_errors
 
 _VARIANCE_NAMES = ("mu", "omega", "alpha", "gamma", "beta")
-_BOUND_TOLERANCE = 1e-6
 
 
 # --- Specification ------------------------------------------------------------------------
@@ -341,53 +341,5 @@ def _starting_values(arr: np.ndarray, spec: GarchSpec) -> list[np.ndarray]:
 def _robust_std_errors(
     theta: np.ndarray, arr: np.ndarray, spec: GarchSpec, start: float, bounds: list
 ) -> np.ndarray:
-    """Bollerslev-Wooldridge robust standard errors: A^-1 B A^-1.
-
-    A is minus the Hessian of the log-likelihood and B the outer product of
-    the per-day scores, both by central finite differences. They stay valid
-    if the assumed distribution of z_t is wrong (quasi-maximum likelihood).
-    Parameters sitting on a bound have no standard error in the usual sense,
-    so they are held fixed and reported as NaN.
-    """
-    at_bound = np.array(
-        [min(abs(v - lo), abs(v - hi)) < _BOUND_TOLERANCE * max(1.0, abs(v))
-         for v, (lo, hi) in zip(theta, bounds)]
-    )
-    free = np.flatnonzero(~at_bound)
-    se = np.full(len(theta), np.nan)
-    if len(free) == 0:
-        return se
-
-    def terms(sub: np.ndarray) -> np.ndarray:
-        full = theta.copy()
-        full[free] = sub
-        return log_likelihood_terms(full, arr, spec, start)
-
-    x = theta[free]
-    h = 1e-4 * np.maximum(np.abs(x), 1e-2)
-    k = len(x)
-
-    scores = np.empty((len(arr), k))
-    for i in range(k):
-        step = np.zeros(k)
-        step[i] = h[i]
-        scores[:, i] = (terms(x + step) - terms(x - step)) / (2 * h[i])
-
-    hessian = np.empty((k, k))
-    for i in range(k):
-        for j in range(i, k):
-            ei, ej = np.zeros(k), np.zeros(k)
-            ei[i], ej[j] = h[i], h[j]
-            value = (
-                terms(x + ei + ej).sum() - terms(x + ei - ej).sum()
-                - terms(x - ei + ej).sum() + terms(x - ei - ej).sum()
-            ) / (4 * h[i] * h[j])
-            hessian[i, j] = hessian[j, i] = value
-
-    try:
-        a_inv = np.linalg.inv(-hessian)
-    except np.linalg.LinAlgError:
-        return se
-    cov = a_inv @ (scores.T @ scores) @ a_inv
-    se[free] = np.sqrt(np.clip(np.diag(cov), 0.0, None))
-    return se
+    """Bollerslev-Wooldridge robust standard errors (see var_es.models.inference)."""
+    return robust_std_errors(lambda t: log_likelihood_terms(t, arr, spec, start), theta, bounds)
