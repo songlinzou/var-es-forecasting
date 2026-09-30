@@ -9,9 +9,14 @@ variance), reports average losses, Diebold-Mariano tests against the
 benchmark model, and the Model Confidence Set. Uses the forecasts from
 run_forecasts.py; the locked test period is not used.
 
-Writes reports/model_comparison_development.md and a figure.
+Writes reports/model_comparison_development.md and a figure. To compare
+another forecast file against a different benchmark, e.g. the macro models:
+
+    python scripts/compare_models.py --forecasts data/processed/forecasts_macro_development.parquet --report model_comparison_macro_development --benchmark "GJR-GARCH(1,1)-skewt (expanding)"
 """
 
+import argparse
+import dataclasses
 from pathlib import Path
 
 import matplotlib
@@ -56,16 +61,29 @@ PROXY_NOTES = {
 
 
 def main() -> None:
+    global REPORT_PATH, FIGURE_PATH  # replaced below if --report is given
+    parser = argparse.ArgumentParser(description="Compare forecasts with loss functions.")
+    parser.add_argument("--forecasts", type=Path, default=FORECAST_PATH, help="forecast parquet file")
+    parser.add_argument("--report", default=REPORT_PATH.stem, help="report name (written to reports/)")
+    parser.add_argument("--benchmark", help="benchmark model (default: comparison.benchmark in the config)")
+    args = parser.parse_args()
+
+    if args.report != REPORT_PATH.stem:
+        REPORT_PATH = PROJECT_ROOT / "reports" / f"{args.report}.md"
+        FIGURE_PATH = PROJECT_ROOT / "reports" / "figures" / f"{args.report}.png"
+
     cfg = load_config(PROJECT_ROOT / "configs" / "base.yaml")
     try:
         settings = ComparisonSettings.from_config(cfg)
     except ValueError as err:
         raise SystemExit(f"{err}\n\n{CONFIG_HINT}")
-    for path, step in ((FORECAST_PATH, "run_forecasts.py"), (DATA_PATH, "build_returns.py")):
+    if args.benchmark:
+        settings = dataclasses.replace(settings, benchmark=args.benchmark)
+    for path, step in ((args.forecasts, "the forecasting script"), (DATA_PATH, "scripts/build_returns.py")):
         if not path.is_file():
-            raise SystemExit(f"{path} not found. Run scripts/{step} first.")
+            raise SystemExit(f"{path} not found. Run {step} first.")
 
-    forecasts = pd.read_parquet(FORECAST_PATH)
+    forecasts = pd.read_parquet(args.forecasts)
     models = list(forecasts.index.get_level_values("model").unique())
     if settings.benchmark not in models:
         raise SystemExit(f"Benchmark {settings.benchmark!r} not found. Models: {models}")
@@ -219,9 +237,11 @@ def _build_report(losses, results, settings, n_days) -> str:
 def _plot_cumulative(losses, settings) -> None:
     name = next(n for n in losses if "FZ0" in n)
     table = losses[name][0]
+    others = [m for m in table.columns if m != settings.benchmark]
+    to_plot = [m for m in PLOT_MODELS if m in others] or others
     FIGURE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 3.8))
-    for model in [m for m in PLOT_MODELS if m in table.columns]:
+    for model in to_plot:
         diff = (table[model] - table[settings.benchmark]).cumsum()
         ax.plot(diff.index, diff, linewidth=1.0, label=model)
     ax.axhline(0, color="0.5", linewidth=0.8)

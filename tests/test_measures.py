@@ -13,11 +13,22 @@ from var_es.risk.measures import (
 )
 
 
-@pytest.mark.parametrize("dist, shape", [("normal", []), ("t", [5.0]), ("t", [12.0])])
+@pytest.mark.parametrize(
+    "dist, shape",
+    [("normal", []), ("t", [5.0]), ("t", [12.0]),
+     ("skewt", [7.4, -0.15]), ("skewt", [5.0, -0.4]), ("skewt", [9.0, 0.3])],
+)
 @pytest.mark.parametrize("alpha", [0.01, 0.025, 0.05])
 def test_closed_form_es_matches_numerical_integration(dist, shape, alpha):
     assert standardized_es(dist, shape, alpha) == pytest.approx(
         numerical_es(dist, shape, alpha), rel=1e-7
+    )
+
+
+def test_skewt_falls_back_to_integration_outside_the_left_piece():
+    # With lambda = 0.97, alpha = 0.025 is beyond (1 - lambda)/2, so the closed form does not apply.
+    assert standardized_es("skewt", [6.0, 0.97], 0.025) == pytest.approx(
+        numerical_es("skewt", [6.0, 0.97], 0.025)
     )
 
 

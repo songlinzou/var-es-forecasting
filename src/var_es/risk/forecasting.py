@@ -10,9 +10,9 @@ Models
   returns.
 - EWMA (RiskMetrics): sigma2_d = lambda * sigma2_{d-1} + (1 - lambda) * r_{d-1}^2,
   zero mean, normal shocks.
-- GARCH family: parameters re-estimated on a rolling window every
-  `refit_every` days; between refits the parameters are held fixed while the
-  variance is updated daily with the new returns.
+- GARCH family: parameters re-estimated every `refit_every` days on a rolling
+  window (or, with expanding=True, on all returns so far); between refits the
+  parameters are held fixed while the variance is updated daily.
 - Filtered historical simulation (FHS): the GJR-GARCH variance forecast,
   combined with the empirical distribution of the window's standardized
   residuals instead of an assumed distribution.
@@ -156,8 +156,9 @@ def garch_forecasts(
     settings: ForecastSettings,
     fhs: bool = False,
     progress: Progress | None = None,
+    expanding: bool = False,
 ) -> dict[str, pd.DataFrame]:
-    """Rolling GARCH-family forecasts.
+    """GARCH-family forecasts on a rolling (default) or expanding window.
 
     Returns a dict with "forecasts" (one row per date), "params" (one row per
     refit) and, if fhs=True, "fhs" (filtered historical simulation using this
@@ -169,7 +170,7 @@ def garch_forecasts(
     rows, fhs_rows, param_rows = [], [], []
 
     for k, (date, i) in enumerate(zip(dates, positions)):
-        window = arr[i - settings.window : i]
+        window = arr[window_start(i, settings, expanding) : i]
 
         if k % settings.refit_every == 0:
             params, converged = _refit(window, spec, params)
@@ -204,6 +205,11 @@ def garch_forecasts(
 
 
 # --- Helpers -------------------------------------------------------------------------------
+
+
+def window_start(i: int, settings: ForecastSettings, expanding: bool) -> int:
+    """First position of the estimation window for a forecast at position i."""
+    return 0 if expanding else i - settings.window
 
 
 def _prepare(returns: pd.Series, dates: pd.DatetimeIndex) -> tuple[np.ndarray, np.ndarray]:

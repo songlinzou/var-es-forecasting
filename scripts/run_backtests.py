@@ -9,8 +9,12 @@ independence and conditional coverage, and (99%) the Basel traffic light.
 ES (97.5%): Acerbi-Szekely Z2 and McNeil-Frey exceedance residuals.
 
 Writes reports/backtests_development.md and a figure, and prints the summary.
+To backtest another forecast file, e.g. the macro-augmented models:
+
+    python scripts/run_backtests.py --forecasts data/processed/forecasts_macro_development.parquet --report backtests_macro_development
 """
 
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -43,10 +47,20 @@ PLOT_MODELS = ["HS-250", "EWMA-0.94", "FHS-GJR", "GJR-GARCH(1,1)-skewt"]
 
 
 def main() -> None:
+    global REPORT_PATH, FIGURE_PATH  # replaced below if --report is given
+    parser = argparse.ArgumentParser(description="Backtest VaR and ES forecasts.")
+    parser.add_argument("--forecasts", type=Path, default=FORECAST_PATH, help="forecast parquet file")
+    parser.add_argument("--report", default=REPORT_PATH.stem, help="report name (written to reports/)")
+    args = parser.parse_args()
+
+    if args.report != REPORT_PATH.stem:
+        REPORT_PATH = PROJECT_ROOT / "reports" / f"{args.report}.md"
+        FIGURE_PATH = PROJECT_ROOT / "reports" / "figures" / f"{args.report}.png"
+
     cfg = load_config(PROJECT_ROOT / "configs" / "base.yaml")
-    if not FORECAST_PATH.is_file():
-        raise SystemExit(f"{FORECAST_PATH} not found. Run scripts/run_forecasts.py first.")
-    forecasts = pd.read_parquet(FORECAST_PATH)
+    if not args.forecasts.is_file():
+        raise SystemExit(f"{args.forecasts} not found. Run the forecasting script first.")
+    forecasts = pd.read_parquet(args.forecasts)
     models = list(forecasts.index.get_level_values("model").unique())
 
     var_levels = cfg["risk"]["confidence_levels_var"]
@@ -57,7 +71,7 @@ def main() -> None:
     verdicts = _verdicts(var_tables, es_tables, models)
 
     n_days = len(forecasts.xs(models[0], level="model"))
-    report = _build_report(var_tables, es_tables, verdicts, n_days)
+    report = _build_report(var_tables, es_tables, verdicts, n_days, n_tests=verdicts.shape[1] - 1)
     REPORT_PATH.write_text(report, encoding="utf-8")
     _plot_traffic_light(forecasts, max(var_levels))
     print(report)
@@ -127,7 +141,9 @@ def _verdicts(var_tables: dict, es_tables: dict, models: list) -> pd.DataFrame:
     return table
 
 
-def _build_report(var_tables: dict, es_tables: dict, verdicts: pd.DataFrame, n_days: int) -> str:
+def _build_report(
+    var_tables: dict, es_tables: dict, verdicts: pd.DataFrame, n_days: int, n_tests: int
+) -> str:
     lines = [
         "# Backtests: development period",
         "",
@@ -138,9 +154,9 @@ def _build_report(var_tables: dict, es_tables: dict, verdicts: pd.DataFrame, n_d
         "",
         md_table(verdicts, index_label="model"),
         "",
-        "With 9 models and 8 tests each, a few rejections at the 5% level would occur by "
-        "chance even if every model were correct, so single borderline rejections should "
-        "not be over-interpreted.",
+        f"With {len(verdicts)} models and {n_tests} tests each, a few rejections at the 5% level "
+        "would occur by chance even if every model were correct, so single borderline "
+        "rejections should not be over-interpreted.",
         "",
     ]
     for level, table in var_tables.items():
@@ -168,11 +184,12 @@ def _build_report(var_tables: dict, es_tables: dict, verdicts: pd.DataFrame, n_d
 
 
 def _plot_traffic_light(forecasts: pd.DataFrame, level: float) -> None:
-    available = forecasts.index.get_level_values("model").unique()
+    available = list(forecasts.index.get_level_values("model").unique())
+    to_plot = [m for m in PLOT_MODELS if m in available] or available
     FIGURE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 3.8))
     top = RED_FROM + 2
-    for model in [m for m in PLOT_MODELS if m in available]:
+    for model in to_plot:
         df = forecasts.xs(model, level="model")
         hits = exceptions(df["ret"], df[f"var_{level}"]).astype(int)
         counts = hits.rolling(TRAFFIC_LIGHT_WINDOW).sum()

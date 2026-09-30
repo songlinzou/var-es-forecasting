@@ -19,7 +19,7 @@ from __future__ import annotations
 import numpy as np
 from scipy import integrate, stats
 
-from var_es.models.distributions import DISTRIBUTIONS
+from var_es.models.distributions import DISTRIBUTIONS, SkewT
 
 
 def standardized_quantile(dist: str, shape, alpha: float) -> float:
@@ -30,8 +30,13 @@ def standardized_quantile(dist: str, shape, alpha: float) -> float:
 def standardized_es(dist: str, shape, alpha: float) -> float:
     """E[z | z <= q_alpha] for the standardized shock distribution (a negative number).
 
-    Closed forms for the normal and Student-t. For the skewed-t, ES is the
-    average of the quantile function over the tail: (1/alpha) * integral of
+    Closed forms for all three distributions. For Hansen's skewed-t, the left
+    tail (alpha < (1 - lambda)/2) is a shifted and rescaled Student-t, so
+
+        ES = [(1 - lambda) * sqrt((nu-2)/nu) * ES_t(alpha / (1 - lambda)) - a] / b
+
+    where ES_t is the lower-tail ES of a standard t. Otherwise ES falls back to
+    numerical integration of the quantile function, (1/alpha) * integral of
     q(u) du from 0 to alpha.
     """
     if dist == "normal":
@@ -40,11 +45,22 @@ def standardized_es(dist: str, shape, alpha: float) -> float:
 
     if dist == "t":
         (nu,) = shape
-        t_q = stats.t.ppf(alpha, nu)
-        es_standard_t = -(nu + t_q**2) / (nu - 1) * stats.t.pdf(t_q, nu) / alpha
-        return float(es_standard_t * np.sqrt((nu - 2) / nu))  # rescale to unit variance
+        return float(_standard_t_es(nu, alpha) * np.sqrt((nu - 2) / nu))  # rescale to unit variance
+
+    if dist == "skewt":
+        nu, lam = shape
+        if alpha < (1 - lam) / 2:
+            a, b, _ = SkewT.constants(nu, lam)
+            es_t = _standard_t_es(nu, alpha / (1 - lam))
+            return float(((1 - lam) * np.sqrt((nu - 2) / nu) * es_t - a) / b)
 
     return numerical_es(dist, shape, alpha)
+
+
+def _standard_t_es(nu: float, alpha: float) -> float:
+    """Lower-tail ES of a standard (not rescaled) Student-t."""
+    t_q = stats.t.ppf(alpha, nu)
+    return float(-(nu + t_q**2) / (nu - 1) * stats.t.pdf(t_q, nu) / alpha)
 
 
 def numerical_es(dist: str, shape, alpha: float) -> float:
