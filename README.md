@@ -168,3 +168,48 @@ Expanding window from 2000; GJR-GARCH-MIDAS-skewt vs GJR-GARCH-skewt, same windo
   uses a profile likelihood over it. Industrial production's likelihood is nearly
   flat in its coefficient; 170 of 806 refits did not meet the strict convergence
   criterion.
+
+## Results
+
+**Research question:** Does augmenting GARCH-family volatility models with macroeconomic
+factors improve out-of-sample VaR and ES forecasts, in terms of both calibration and accuracy?
+
+**Answer: no.** Adding the credit spread, term spread or industrial production growth to a
+GJR-GARCH model with skewed-t shocks (via GARCH-MIDAS, real-time data) did not improve
+VaR or ES forecasts on the locked test period (2020–2026). The one development-period
+improvement (credit spread, volatility forecasts) did not replicate and reversed sign.
+Full summary: [reports/final_summary.md](reports/final_summary.md).
+
+### Primary hypothesis (pre-registered; git tag `pre-locked-test`)
+| | Development 2004–2019 | Locked test 2020–2026 |
+|---|---|---|
+| FZ0 loss, credit-spread model vs baseline | −0.92% (p = 0.31) | +0.98% (p = 0.38) |
+| QLIKE, credit-spread model vs baseline | −1.36% (p = 0.021) | +0.59% (p = 0.21) |
+| Verdict | supported on QLIKE only | not supported |
+
+### What held up out of sample
+- GJR-GARCH-skewt and filtered historical simulation remain the two best models on FZ0
+  loss and are statistically indistinguishable; FHS passes all 8 backtests, GJR-skewt 7.
+- 99% VaR: both have 20 exceptions vs 16.7 expected; normal-based models have 35–40.
+- Leverage drives volatility accuracy: only GJR models are in the QLIKE MCS.
+- Historical simulation fails all 8 backtests; exceptions cluster (13% chance of an
+  exception the day after an exception).
+
+### Interpretation
+- **Selection:** the credit spread was chosen as the primary hypothesis because it was best
+  in development, so part of its advantage was likely luck.
+- **Instability:** macro–volatility relationships estimated on 2000–2019 did not carry over.
+  The term-spread model became significantly worse (FZ0 +0.94%, p = 0.043), plausibly
+  because its coefficient was learned in easing cycles, not in the 2022–24 inversion.
+- **Power:** 1,674 test days cannot detect differences of about 1% in FZ0 loss.
+- Industrial production ranked first in the test after ranking last in development; the
+  difference is not significant and it was not pre-registered, so it is further evidence
+  of instability rather than support for macro augmentation.
+
+### Limitations
+- One asset (SPY), one horizon (1 day). Macro effects may matter more at longer horizons.
+- Three macro variables and one model form (GARCH-MIDAS, 12 monthly lags).
+- The credit spread is a market price that partly reflects equity volatility.
+- The industrial production model's likelihood is nearly flat in its coefficient.
+- Parametric skewed-t models underestimated ES in the test period (McNeil–Frey), which
+  had heavier tails than 2000–2019; FHS did not.
