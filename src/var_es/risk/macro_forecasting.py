@@ -40,17 +40,20 @@ def midas_forecasts(
     arr, positions = _prepare(returns, dates)
     x_all = daily_macro(returns.index, monthly_lags)
     n_refits = int(np.ceil(len(dates) / settings.refit_every))
-    params, tails = None, None
+    params, tails, profile = None, None, None
     rows, param_rows = [], []
 
     for k, (date, i) in enumerate(zip(dates, positions)):
         lo = window_start(i, settings, expanding)
 
         if k % settings.refit_every == 0:
-            params, converged = _refit(returns.iloc[lo:i], monthly_lags, spec, params)
+            params, converged, loglik, profile = _refit(
+                returns.iloc[lo:i], monthly_lags, spec, params, profile
+            )
             shape = [float(params[n]) for n in spec.distribution.shape_names]
             tails = _tail_constants(spec.dist, shape, settings)
-            param_rows.append({"date": date, **params.to_dict(), "converged": converged})
+            param_rows.append({"date": date, **params.to_dict(), "converged": converged,
+                               "loglik": loglik})
             if progress is not None:
                 progress(len(param_rows), n_refits)
 
@@ -63,14 +66,18 @@ def midas_forecasts(
     }
 
 
-def _refit(window: pd.Series, monthly_lags: pd.DataFrame, spec: MidasSpec, previous):
-    """Re-estimate; keep the previous parameters if the fit fails."""
+def _refit(window: pd.Series, monthly_lags: pd.DataFrame, spec: MidasSpec, previous, profile):
+    """Re-estimate, warm-starting each fixed-w fit from its previous solution.
+
+    Keeps the previous parameters if the fit fails.
+    """
     try:
-        fit = fit_midas(window, monthly_lags, spec, start_params=previous, std_errors=False)
+        fit = fit_midas(window, monthly_lags, spec, start_params=previous,
+                        std_errors=False, profile_starts=profile)
         if np.all(np.isfinite(fit.params)):
-            return fit.params, fit.converged
+            return fit.params, fit.converged, fit.loglik, fit.profile
     except (ValueError, np.linalg.LinAlgError):
         pass
     if previous is None:
         raise RuntimeError(f"The first {spec.name} fit failed; no parameters to fall back on.")
-    return previous, False
+    return previous, False, float("nan"), profile

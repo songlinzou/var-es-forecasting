@@ -173,3 +173,19 @@ def test_nan_macro_lags_are_rejected(with_macro):
 def test_unknown_distribution_rejected():
     with pytest.raises(ValueError, match="dist must be one of"):
         MidasSpec("laplace")
+
+
+def test_estimate_does_not_depend_on_a_bad_starting_point():
+    # True model: equal weights over 12 months (w = 1) and a negative macro effect.
+    returns, lags = simulate_midas(n_months=300, theta=-0.6, w=1.0, seed=4)
+    fresh = fit_midas(returns, lags, MidasSpec("skewt"), std_errors=False)
+
+    # Start from the wrong peak: weight on the last month and the wrong sign.
+    bad_start = fresh.params.copy()
+    bad_start["w"], bad_start["theta"] = 50.0, 0.5
+    warm = fit_midas(returns, lags, MidasSpec("skewt"), start_params=bad_start, std_errors=False)
+
+    assert warm.loglik == pytest.approx(fresh.loglik, abs=1e-3)
+    assert warm.params["theta"] == pytest.approx(fresh.params["theta"], abs=0.02)
+    assert warm.params["theta"] < 0
+    assert warm.converged

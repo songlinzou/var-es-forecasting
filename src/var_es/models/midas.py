@@ -31,6 +31,16 @@ descriptive evidence only.
 
 theta is in units of ln(variance) per unit of X: a one-unit rise in the
 weighted macro variable multiplies the long-run variance by exp(theta).
+
+Estimation: profile likelihood over w
+-------------------------------------
+The lag-shape parameter w is weakly identified and the likelihood can have
+more than one peak in it (e.g. equal weights with theta < 0, or weight on the
+last month with theta > 0). A joint optimizer started from the wrong side can
+stall on the flat ridge between them. So w is first fixed at each value in
+W_GRID while the other parameters are estimated (a well-behaved problem), the
+best of these is kept, and a final joint step refines w from there. The joint
+refinement is kept only if it converges to a higher likelihood.
 """
 
 from __future__ import annotations
@@ -48,6 +58,10 @@ from var_es.models.inference import robust_std_errors
 
 VARIANCE_NAMES = ["mu", "alpha", "gamma", "beta", "m0", "theta", "w"]
 W_BOUNDS = (1.0, 50.0)
+W_GRID = (1.0, 2.0, 3.0, 5.0, 10.0, 20.0, 50.0)
+# The profile fits only need to find the right peak; the final joint step is precise.
+_PROFILE_OPTIONS = {"maxiter": 500, "ftol": 1e-9}
+_JOINT_OPTIONS = {"maxiter": 500, "ftol": 1e-11}
 
 
 def beta_weights(w: float, n_lags: int) -> np.ndarray:
@@ -157,6 +171,7 @@ class MidasResult:
     tau: pd.Series
     g: pd.Series
     n_lags: int
+    profile: dict  # w -> best parameter vector at that w; warm starts for the next refit
 
     @property
     def n_params(self) -> int:
@@ -195,48 +210,84 @@ def fit_midas(
     spec: MidasSpec = MidasSpec(),
     start_params: pd.Series | None = None,
     std_errors: bool = True,
+    profile_starts: dict | None = None,
 ) -> MidasResult:
-    """Estimate GJR-GARCH-MIDAS by maximum likelihood (SLSQP, grid of starting values)."""
+    """Estimate GJR-GARCH-MIDAS by maximum likelihood, profiling over w.
+
+    Starting values for each fixed-w fit: that w's solution from the previous
+    refit (profile_starts, taken from the previous result's .profile) if
+    available, else start_params, else a grid.
+    """
     y = pd.Series(returns, dtype=float).dropna()
     arr = y.to_numpy()
     x_daily = daily_macro(y.index, monthly_lags)
     start = backcast(arr - arr.mean())
     bounds = _bounds(arr, x_daily, spec)
+    names = spec.param_names
+    iw = names.index("w")
 
     def objective(v: np.ndarray) -> float:
         value = -np.mean(log_likelihood_terms(v, arr, x_daily, spec, start))
         return value if np.isfinite(value) else 1e10
 
-    candidates = _starting_values(arr, x_daily, spec)
     if start_params is not None:
         lo, hi = zip(*bounds)
-        candidates.append(np.clip(start_params[spec.param_names].to_numpy(dtype=float), lo, hi))
-    x0 = min(candidates, key=objective)
+        base = [np.clip(start_params[names].to_numpy(dtype=float), lo, hi)]
+    else:
+        base = _starting_values(arr, x_daily, spec)
 
-    result = optimize.minimize(
-        objective, x0, method="SLSQP", bounds=bounds, constraints=_constraints(spec),
-        options={"maxiter": 1000, "ftol": 1e-12},
+    # 1. Profile: for each fixed w, estimate the other parameters.
+    free_bounds = bounds[:iw] + bounds[iw + 1 :]
+    lo, hi = zip(*bounds)
+    best_value, best_v, best_ok, best_msg = np.inf, None, False, ""
+    profile = {}
+    for w in W_GRID:
+        candidates = [np.insert(np.delete(c, iw), iw, w) for c in base]
+        if profile_starts and w in profile_starts:
+            candidates.append(np.clip(np.asarray(profile_starts[w], dtype=float), lo, hi))
+        x0 = min(candidates, key=objective)
+
+        def fixed_w(v_free, w=w):
+            return objective(np.insert(v_free, iw, w))
+
+        result = optimize.minimize(
+            fixed_w, np.delete(x0, iw), method="SLSQP", bounds=free_bounds,
+            constraints=_constraints(spec, fixed_w=w), options=_PROFILE_OPTIONS,
+        )
+        profile[w] = np.insert(result.x, iw, w)
+        if result.fun < best_value:
+            best_value, best_v = result.fun, profile[w]
+            best_ok, best_msg = bool(result.success), str(result.message)
+
+    # 2. Refine w jointly, keeping the result only if it converges and improves.
+    joint = optimize.minimize(
+        objective, best_v, method="SLSQP", bounds=bounds,
+        constraints=_constraints(spec), options=_JOINT_OPTIONS,
     )
-    v = result.x
-    p = dict(zip(spec.param_names, v))
+    if joint.success and joint.fun <= best_value:
+        v, converged, message = joint.x, True, str(joint.message)
+    else:
+        v, converged, message = best_v, best_ok, f"profile over w (joint step: {joint.message})"
+
+    p = dict(zip(names, v))
     tau, g = components(p, arr, x_daily, start)
     se = (
         robust_std_errors(lambda t: log_likelihood_terms(t, arr, x_daily, spec, start), v, bounds)
         if std_errors else np.full(len(v), np.nan)
     )
-    fitted = MidasResult(
+    return MidasResult(
         spec=spec,
-        params=pd.Series(v, index=spec.param_names),
-        std_errors=pd.Series(se, index=spec.param_names),
+        params=pd.Series(v, index=names),
+        std_errors=pd.Series(se, index=names),
         loglik=float(log_likelihood_terms(v, arr, x_daily, spec, start).sum()),
         n_obs=len(arr),
-        converged=bool(result.success),
-        message=str(result.message),
+        converged=converged,
+        message=message,
         tau=pd.Series(tau, index=y.index, name="tau"),
         g=pd.Series(g, index=y.index, name="g"),
         n_lags=x_daily.shape[1],
+        profile=profile,
     )
-    return fitted
 
 
 def _bounds(arr: np.ndarray, x_daily: np.ndarray, spec: MidasSpec) -> list[tuple[float, float]]:
@@ -255,8 +306,10 @@ def _bounds(arr: np.ndarray, x_daily: np.ndarray, spec: MidasSpec) -> list[tuple
     return [variance[n] for n in VARIANCE_NAMES] + list(spec.distribution.shape_bounds)
 
 
-def _constraints(spec: MidasSpec) -> list[dict]:
-    i = {name: spec.param_names.index(name) for name in ("alpha", "gamma", "beta")}
+def _constraints(spec: MidasSpec, fixed_w: float | None = None) -> list[dict]:
+    """Stationarity and positivity; with fixed_w, for the vector without w."""
+    names = spec.param_names if fixed_w is None else [n for n in spec.param_names if n != "w"]
+    i = {name: names.index(name) for name in ("alpha", "gamma", "beta")}
     return [
         {"type": "ineq", "fun": lambda v: 1.0 - (v[i["alpha"]] + 0.5 * v[i["gamma"]] + v[i["beta"]])},
         {"type": "ineq", "fun": lambda v: v[i["alpha"]] + v[i["gamma"]]},
@@ -269,8 +322,8 @@ def _starting_values(arr: np.ndarray, x_daily: np.ndarray, spec: MidasSpec) -> l
     x_scale = float(np.std(x_daily)) or 1.0
     candidates = []
     grid = itertools.product(
-        (0.02, 0.06), (0.1,), (0.85, 0.9), (-0.3, 0.0, 0.3), (1.0, 5.0), spec.distribution.shape_starts
-    )
+        (0.02, 0.06), (0.1,), (0.85, 0.9), (-0.3, 0.0, 0.3), (1.0,), spec.distribution.shape_starts
+    )  # w is set by the profile loop
     for alpha, gamma, beta, theta_sd, w, shape in grid:
         theta = theta_sd / x_scale
         m0 = log_var - theta * x_mean  # centre ln(tau) on the sample variance

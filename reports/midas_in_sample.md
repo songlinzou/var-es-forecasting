@@ -7,13 +7,13 @@ Sample: 2000-01-04 to 2019-12-31 (5,030 daily returns). Each model uses one macr
 | parameter | credit_spread | term_spread | ip_growth |
 |---|---|---|---|
 | mu | 0.0288 (0.0105) | 0.0277 (0.0105) | 0.0276 (0.0106) |
-| alpha | 0 (at bound) | 2.5e-18 (at bound) | 2.8e-20 (at bound) |
+| alpha | 9.3e-18 (at bound) | 2.8e-18 (at bound) | 7.1e-20 (at bound) |
 | gamma | 0.2290 (0.0239) | 0.2189 (0.0250) | 0.2230 (0.0247) |
 | beta | 0.8612 (0.0129) | 0.8747 (0.0123) | 0.8724 (0.0123) |
-| m0 | -1.4832 (0.3819) | -0.1266 (0.3232) | 0.3392 (0.2872) |
-| theta | 0.6040 (0.1124) | 0.1931 (0.0657) | -0.7339 (0.3295) |
-| w | 4.8234 (2.1370) | 50.0 (at bound) | 1.0000 (at bound) |
-| nu | 7.8303 (0.8961) | 7.5153 (0.8257) | 7.4628 (0.7925) |
+| m0 | -1.4832 (0.3819) | -0.1265 (0.3232) | 0.3392 (0.2872) |
+| theta | 0.6040 (0.1124) | 0.1931 (0.0657) | -0.7336 (0.3296) |
+| w | 4.8233 (2.1369) | 50.0 (at bound) | 1.0000 (at bound) |
+| nu | 7.8302 (0.8961) | 7.5155 (0.8257) | 7.4620 (0.7921) |
 | lambda | -0.1522 (0.0176) | -0.1497 (0.0177) | -0.1509 (0.0177) |
 
 theta: change in ln(long-run variance) per unit of the weighted macro variable. w: lag-weight shape (1 = equal weights; larger = more weight on recent months).
@@ -27,8 +27,8 @@ theta: change in ln(long-run variance) per unit of the weighted macro variable. 
 | AIC | 13,165.4 | 13,146.7 | 13,159.3 | 13,164.5 |
 | BIC | 13,211.1 | 13,205.4 | 13,218.0 | 13,223.2 |
 | persistence | 0.9865 | 0.9757 | 0.9841 | 0.9839 |
-| theta t-stat | n/a | 5.3758 | 2.9402 | -2.2276 |
-| variance ratio | n/a | 0.1944 | 0.0537 | 0.0478 |
+| theta t-stat | n/a | 5.3758 | 2.9403 | -2.2259 |
+| variance ratio | n/a | 0.1944 | 0.0537 | 0.0477 |
 | long-run vol, +1 sd of macro | - | +24.0% | +11.9% | -10.0% |
 
 LR vs baseline = 2 x log-likelihood gain. Because w has no effect when theta = 0, this does not follow the usual chi-squared distribution (Davies, 1987); treat it as descriptive. Variance ratio: share of the variation in ln(variance) explained by the long-run component. With three variables tested, one nominally significant result could arise by chance.
@@ -39,8 +39,8 @@ LR vs baseline = 2 x log-likelihood gain. Because w has no effect when theta = 0
 |---|---|---|---|---|
 | skewness | -0.5653 | -0.5892 | -0.5945 | -0.5612 |
 | excess kurtosis | 2.0163 | 2.2363 | 2.3501 | 1.9900 |
-| Ljung-Box p, z squared (10 lags) | 0.0905 | 0.0428 | 0.1180 | 0.0648 |
-| ARCH-LM p (5 lags) | 0.0723 | 0.0297 | 0.1176 | 0.0426 |
+| Ljung-Box p, z squared (10 lags) | 0.0905 | 0.0428 | 0.1180 | 0.0649 |
+| ARCH-LM p (5 lags) | 0.0723 | 0.0297 | 0.1176 | 0.0427 |
 
 In-sample fit is not the research question: whether macro information improves out-of-sample VaR and ES forecasts is tested in Step 5.3.
 

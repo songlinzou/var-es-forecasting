@@ -8,55 +8,55 @@ Rank by average loss; * marks models in the 90% MCS.
 
 | model | VaR 99.0%, tick loss | VaR 97.5%, tick loss | VaR and ES 97.5%, FZ0 loss | variance, QLIKE vs gk_overnight | variance, QLIKE vs sq_ret | variance, QLIKE vs parkinson | variance, MSE vs gk_overnight |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: credit_spread | 4 * | 2 * | 1 * | 1 * | 1 * | 2 * | 4 * |
-| MIDAS-skewt: term_spread | 1 * | 1 * | 2 * | 3 | 3 * | 3 | 2 * |
-| MIDAS-skewt: ip_growth | 2 * | 3 * | 3 * | 4 | 2 * | 4 | 1 * |
-| GJR-GARCH(1,1)-skewt (expanding) | 3 * | 4 * | 4 * | 2 | 4 * | 1 * | 3 * |
+| MIDAS-skewt: credit_spread | 3 * | 2 * | 1 * | 1 * | 1 * | 3 * | 4 * |
+| MIDAS-skewt: term_spread | 1 * | 1 * | 2 * | 3 | 3 * | 1 * | 2 * |
+| MIDAS-skewt: ip_growth | 4 * | 4 * | 3 * | 4 | 4 * | 4 | 3 * |
+| GJR-GARCH(1,1)-skewt (expanding) | 2 * | 3 * | 4 * | 2 | 2 * | 2 * | 1 * |
 
 ## VaR 99.0%, tick loss
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: term_spread | 0.0322 | 1 | -0.38% | -0.4827 | 0.6293 | 1.0000 | yes |
-| MIDAS-skewt: ip_growth | 0.0323 | 2 | -0.23% | -0.1850 | 0.8532 | 0.8941 | yes |
-| GJR-GARCH(1,1)-skewt (expanding) | 0.0324 | 3 | +0.00% | n/a | n/a | 0.8941 | yes |
-| MIDAS-skewt: credit_spread | 0.0324 | 4 | +0.20% | 0.2670 | 0.7895 | 0.8941 | yes |
+| MIDAS-skewt: term_spread | 0.0322 | 1 | -0.37% | -1.1035 | 0.2698 | 1.0000 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 0.0324 | 2 | +0.00% | n/a | n/a | 0.8774 | yes |
+| MIDAS-skewt: credit_spread | 0.0324 | 3 | +0.05% | 0.0642 | 0.9488 | 0.8774 | yes |
+| MIDAS-skewt: ip_growth | 0.0325 | 4 | +0.30% | 0.4360 | 0.6628 | 0.8465 | yes |
 
 ## VaR 97.5%, tick loss
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: term_spread | 0.0668 | 1 | -0.43% | -0.7961 | 0.4260 | 1.0000 | yes |
-| MIDAS-skewt: credit_spread | 0.0671 | 2 | -0.06% | -0.1069 | 0.9149 | 0.9332 | yes |
-| MIDAS-skewt: ip_growth | 0.0671 | 3 | -0.03% | -0.0434 | 0.9654 | 0.9332 | yes |
-| GJR-GARCH(1,1)-skewt (expanding) | 0.0671 | 4 | +0.00% | n/a | n/a | 0.9332 | yes |
+| MIDAS-skewt: term_spread | 0.0669 | 1 | -0.34% | -1.8888 | 0.0589 | 1.0000 | yes |
+| MIDAS-skewt: credit_spread | 0.0670 | 2 | -0.10% | -0.1752 | 0.8609 | 0.8177 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 0.0671 | 3 | +0.00% | n/a | n/a | 0.8177 | yes |
+| MIDAS-skewt: ip_growth | 0.0672 | 4 | +0.15% | 0.3097 | 0.7568 | 0.8177 | yes |
 
 ## VaR and ES 97.5%, FZ0 loss
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: credit_spread | 0.8883 | 1 | -1.12% | -1.3055 | 0.1917 | 1.0000 | yes |
-| MIDAS-skewt: term_spread | 0.8905 | 2 | -0.88% | -1.5135 | 0.1301 | 0.8254 | yes |
-| MIDAS-skewt: ip_growth | 0.8926 | 3 | -0.65% | -0.7724 | 0.4398 | 0.8254 | yes |
-| GJR-GARCH(1,1)-skewt (expanding) | 0.8984 | 4 | +0.00% | n/a | n/a | 0.1808 | yes |
+| MIDAS-skewt: credit_spread | 0.8902 | 1 | -0.92% | -1.0236 | 0.3060 | 1.0000 | yes |
+| MIDAS-skewt: term_spread | 0.8953 | 2 | -0.35% | -0.7405 | 0.4590 | 0.6607 | yes |
+| MIDAS-skewt: ip_growth | 0.8977 | 3 | -0.08% | -0.1671 | 0.8673 | 0.6607 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 0.8984 | 4 | +0.00% | n/a | n/a | 0.5131 | yes |
 
 ## variance, QLIKE vs gk_overnight
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: credit_spread | 0.6694 | 1 | -1.47% | -2.4912 | 0.0127 | 1.0000 | yes |
-| GJR-GARCH(1,1)-skewt (expanding) | 0.6794 | 2 | +0.00% | n/a | n/a | 0.0202 | no |
-| MIDAS-skewt: term_spread | 0.6826 | 3 | +0.47% | 1.2009 | 0.2298 | 0.0202 | no |
-| MIDAS-skewt: ip_growth | 0.6867 | 4 | +1.07% | 1.9023 | 0.0571 | 0.0196 | no |
+| MIDAS-skewt: credit_spread | 0.6702 | 1 | -1.36% | -2.3088 | 0.0210 | 1.0000 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 0.6794 | 2 | +0.00% | n/a | n/a | 0.0398 | no |
+| MIDAS-skewt: term_spread | 0.6797 | 3 | +0.04% | 0.1678 | 0.8667 | 0.0398 | no |
+| MIDAS-skewt: ip_growth | 0.6843 | 4 | +0.71% | 2.2017 | 0.0277 | 0.0065 | no |
 
 ## variance, QLIKE vs sq_ret
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: credit_spread | 0.6555 | 1 | -0.91% | -1.3232 | 0.1858 | 1.0000 | yes |
-| MIDAS-skewt: ip_growth | 0.6602 | 2 | -0.21% | -0.3834 | 0.7014 | 0.4740 | yes |
-| MIDAS-skewt: term_spread | 0.6605 | 3 | -0.16% | -0.3691 | 0.7120 | 0.4740 | yes |
-| GJR-GARCH(1,1)-skewt (expanding) | 0.6616 | 4 | +0.00% | n/a | n/a | 0.4740 | yes |
+| MIDAS-skewt: credit_spread | 0.6560 | 1 | -0.84% | -1.2101 | 0.2262 | 1.0000 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 0.6616 | 2 | +0.00% | n/a | n/a | 0.4921 | yes |
+| MIDAS-skewt: term_spread | 0.6620 | 3 | +0.07% | 0.1602 | 0.8728 | 0.4921 | yes |
+| MIDAS-skewt: ip_growth | 0.6629 | 4 | +0.20% | 0.6107 | 0.5414 | 0.4921 | yes |
 
 Note: Squared returns are unbiased but very noisy, so differences are harder to detect.
 
@@ -64,10 +64,10 @@ Note: Squared returns are unbiased but very noisy, so differences are harder to 
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| GJR-GARCH(1,1)-skewt (expanding) | 0.3755 | 1 | +0.00% | n/a | n/a | 1.0000 | yes |
-| MIDAS-skewt: credit_spread | 0.3786 | 2 | +0.84% | 0.9718 | 0.3312 | 0.4086 | yes |
-| MIDAS-skewt: term_spread | 0.3846 | 3 | +2.44% | 4.2490 | 2.1e-05 | 0.0060 | no |
-| MIDAS-skewt: ip_growth | 0.3886 | 4 | +3.50% | 4.6756 | 2.9e-06 | 0.0016 | no |
+| MIDAS-skewt: term_spread | 0.3726 | 1 | -0.75% | -1.9478 | 0.0514 | 1.0000 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 0.3755 | 2 | +0.00% | n/a | n/a | 0.3781 | yes |
+| MIDAS-skewt: credit_spread | 0.3779 | 3 | +0.66% | 0.7675 | 0.4428 | 0.3781 | yes |
+| MIDAS-skewt: ip_growth | 0.3881 | 4 | +3.37% | 7.5872 | 3.3e-14 | 0 | no |
 
 Note: Parkinson misses the overnight move (it captures about two-thirds of close-to-close variance), so it is biased low and QLIKE on it favours models that under-forecast. Kept because it was pre-registered; interpret with caution.
 
@@ -75,10 +75,10 @@ Note: Parkinson misses the overnight move (it captures about two-thirds of close
 
 | model | mean loss | rank | vs benchmark | DM t | DM p | MCS p | in MCS |
 |---|---|---|---|---|---|---|---|
-| MIDAS-skewt: ip_growth | 8.8923 | 1 | -4.03% | -0.7124 | 0.4762 | 1.0000 | yes |
-| MIDAS-skewt: term_spread | 9.0265 | 2 | -2.58% | -0.5603 | 0.5753 | 0.6225 | yes |
-| GJR-GARCH(1,1)-skewt (expanding) | 9.2654 | 3 | +0.00% | n/a | n/a | 0.6225 | yes |
-| MIDAS-skewt: credit_spread | 10.9 | 4 | +18.13% | 1.3504 | 0.1769 | 0.1910 | yes |
+| GJR-GARCH(1,1)-skewt (expanding) | 9.2654 | 1 | +0.00% | n/a | n/a | 1.0000 | yes |
+| MIDAS-skewt: term_spread | 9.2692 | 2 | +0.04% | 0.1627 | 0.8708 | 0.8545 | yes |
+| MIDAS-skewt: ip_growth | 9.8024 | 3 | +5.80% | 0.6571 | 0.5111 | 0.5413 | yes |
+| MIDAS-skewt: credit_spread | 10.1 | 4 | +8.92% | 1.5186 | 0.1289 | 0.1268 | yes |
 
 Note: MSE is dominated by a few crisis days, so it is less informative than QLIKE.
 
