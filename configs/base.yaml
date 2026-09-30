@@ -37,3 +37,12 @@ comparison:
   mcs_confidence: 0.90                 # Model Confidence Set level
   block_length: 10                     # mean block length (days) of the stationary bootstrap
   bootstrap_reps: 10000
+
+macro:
+  start: "1996-01-01"            # history needed for 12 monthly lags before 2000
+  midas_lags: 12                 # months of macro history in the long-run component
+  variables:                     # name: [FRED series id, transformation]
+    credit_spread: ["BAA10Y", "monthly_mean"]
+    term_spread: ["T10Y3M", "monthly_mean"]
+    ip_growth: ["INDPRO", "real_time_growth"]
+  snapshot: "macro_1996-01-01_2026-08-31_dl20260930"
