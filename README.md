@@ -146,3 +146,25 @@ GJR-GARCH-MIDAS with skewed-t shocks, one macro variable per model,
   Bonferroni correction for three variables.
 - **Caveat:** credit spreads are market prices that partly reflect equity volatility,
   so they are a market-implied risk indicator rather than pure macro fundamentals.
+
+## Macro-augmented forecasts (development period, 2004–2019)
+Reports: [forecasts](reports/forecasts_macro_development.md),
+[backtests](reports/backtests_macro_development.md),
+[comparison](reports/model_comparison_macro_development.md).
+Expanding window from 2000; GJR-GARCH-MIDAS-skewt vs GJR-GARCH-skewt, same window.
+
+- **Calibration:** all four models pass essentially every backtest; the baseline
+  is already well calibrated.
+- **Volatility (QLIKE):** the credit-spread model is 1.36% better (DM p = 0.021)
+  and the only model in the 90% MCS. Borderline after a Bonferroni correction for
+  three variables (threshold 0.017).
+- **VaR and ES (FZ0):** credit spread ranks first (−0.92%) but not significantly
+  (p = 0.31); all models are in the MCS.
+- **Term spread and industrial production:** no improvement; industrial production
+  slightly worsens volatility forecasts (+0.71%, p = 0.028).
+- **Real-time stability:** the credit-spread coefficient was positive at every
+  refit from 2004 onward (0.58–0.65).
+- **Estimation note:** the lag-shape parameter is weakly identified, so estimation
+  uses a profile likelihood over it. Industrial production's likelihood is nearly
+  flat in its coefficient; 170 of 806 refits did not meet the strict convergence
+  criterion.
