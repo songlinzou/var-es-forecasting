@@ -116,3 +116,18 @@ Full report: [reports/backtests_development.md](reports/backtests_development.md
   the textbook versions rejected a correct model only 1–2.5% of the time at 5%.
 - **Caveat:** GJR-skewt was selected on in-sample fit over an overlapping period;
   the locked test period (2020–2026) provides the unbiased check.
+
+## Model comparison (development period, 2004–2019)
+Full report: [reports/model_comparison_development.md](reports/model_comparison_development.md).
+Losses: tick loss (VaR), FZ0 (VaR and ES jointly), QLIKE (variance, vs gk_overnight).
+Diebold–Mariano tests vs GJR-GARCH-skewt; 90% Model Confidence Set (stationary bootstrap).
+
+- **VaR and ES jointly (FZ0):** only GJR-GARCH-skewt and FHS-GJR are in the MCS;
+  GJR-GARCH-t is 2.9% worse (DM p = 0.006). These are the same two models that
+  passed all backtests: calibration and accuracy agree.
+- **Variance (QLIKE):** all three GJR models are in the MCS with insignificant
+  differences; symmetric GARCH and EWMA are excluded (3–9% worse).
+- **Interpretation:** leverage improves volatility forecasts; the skewed-t
+  improves tail-risk forecasts; VaR and ES need both.
+- 99% tick loss has little power (six models in the MCS), illustrating why
+  backtests and loss comparisons are complementary.
